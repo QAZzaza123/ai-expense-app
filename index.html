@@ -29,14 +29,14 @@ small{color:#666}
 
 <div class="card">
 <h3>新增紀錄</h3>
-<input id="input" placeholder="早餐60現 / 薪水30000銀 / 轉帳1000銀到現 / 薪水14000到股票帳戶">
+<input id="input" placeholder="早餐60現 / 薪水30000玉山 / 轉帳5000玉山到台新 / 薪水14000玉山到股票帳戶">
 <button onclick="add()">新增</button>
 <p class="hint">
-現=現金、銀=銀行、信=信用卡<br>
-收入：薪水30000銀<br>
-支出：早餐60現<br>
-轉帳：轉帳1000銀到現<br>
-投資：薪水14000到股票帳戶
+範例：<br>
+收入：薪水30000玉山<br>
+支出：早餐60現、電影300台新<br>
+轉帳：轉帳5000玉山到台新<br>
+投資：薪水14000玉山到股票帳戶
 </p>
 </div>
 
@@ -69,7 +69,7 @@ small{color:#666}
 </div>
 
 <script>
-let data = JSON.parse(localStorage.getItem("finalStableData")) || [];
+let data = JSON.parse(localStorage.getItem("dynamicBankData")) || [];
 
 function today(){
   return new Date().toLocaleDateString("zh-TW");
@@ -80,11 +80,17 @@ function monthKey(){
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
 }
 
-function accName(t){
-  if(t.includes("現")) return "現金";
-  if(t.includes("銀")) return "銀行";
-  if(t.includes("信")) return "信用卡";
-  return "銀行";
+function normalizeAccount(text){
+  if(!text) return "銀行";
+  text = text.trim();
+
+  if(text==="現") return "現金";
+  if(text==="銀") return "銀行";
+  if(text==="信") return "信用卡";
+  if(text==="悠") return "悠遊卡";
+  if(text==="L") return "LINE Pay";
+
+  return text;
 }
 
 function classify(t){
@@ -92,9 +98,22 @@ function classify(t){
   if(/公車|捷運|高鐵|火車|交通|油錢|Uber/.test(t)) return "交通";
   if(/電影|遊戲|娛樂|Netflix|KTV/.test(t)) return "娛樂";
   if(/購物|衣服|鞋子|包包|生活用品/.test(t)) return "購物";
-  if(/房租|房貸|保險|電費|水費|手機費/.test(t)) return "固定支出";
+  if(/房租|房貸|保險|電費|水費|手機費|車貸/.test(t)) return "固定支出";
   if(/醫療|看病|藥/.test(t)) return "醫療";
   return "其他";
+}
+
+function parseBasic(text){
+  let num = text.match(/\d+/);
+  if(!num) return null;
+
+  let amount = parseInt(num[0]);
+  let parts = text.split(num[0]);
+
+  let name = parts[0].trim();
+  let account = normalizeAccount(parts[1]);
+
+  return {name, amount, account};
 }
 
 function parse(t){
@@ -106,24 +125,61 @@ function parse(t){
   let month = monthKey();
 
   if(t.includes("到股票帳戶")){
-    let account = accName(t);
-    return {type:"投資",amount,account,date,month,category:"投資"};
+    let clean = t.replace("到股票帳戶","");
+    let basic = parseBasic(clean);
+
+    return {
+      type:"投資",
+      name:basic.name || "投入股票帳戶",
+      amount,
+      account:basic.account || "銀行",
+      date,
+      month,
+      category:"投資"
+    };
   }
 
   if(t.includes("轉帳") && t.includes("到")){
-    let from = t.includes("現到") ? "現金" : t.includes("銀到") ? "銀行" : t.includes("信到") ? "信用卡" : "銀行";
-    let to = t.includes("到現") ? "現金" : t.includes("到銀") ? "銀行" : t.includes("到信") ? "信用卡" : "銀行";
-    return {type:"轉帳",amount,from,to,date,month};
+    let clean = t.replace("轉帳","").replace(amount,"");
+    let parts = clean.split("到");
+
+    let from = normalizeAccount(parts[0]);
+    let to = normalizeAccount(parts[1]);
+
+    return {
+      type:"轉帳",
+      amount,
+      from,
+      to,
+      date,
+      month
+    };
   }
 
-  let account = accName(t);
-  let name = t.replace(/\d+/g,"").replace(/[現銀信]/g,"").trim();
+  let basic = parseBasic(t);
+  let name = basic.name;
+  let account = basic.account;
 
   if(/薪水|收入|獎金|打工|退款|零用錢/.test(name)){
-    return {type:"收入",name,amount,account,date,month};
+    return {
+      type:"收入",
+      name,
+      amount,
+      account,
+      date,
+      month
+    };
   }
 
-  return {type:"支出",name,amount,account,date,month,category:classify(name)};
+  return {
+    type:"支出",
+    name,
+    amount,
+    account,
+    date,
+    month,
+    category:classify(name)
+  };
 }
 
 function add(){
@@ -132,12 +188,12 @@ function add(){
   let record = parse(text);
 
   if(!record){
-    alert("格式錯誤，請輸入：早餐60現、薪水30000銀、轉帳1000銀到現");
+    alert("格式錯誤，請輸入：早餐60現、薪水30000玉山、轉帳5000玉山到台新");
     return;
   }
 
   data.push(record);
-  localStorage.setItem("finalStableData",JSON.stringify(data));
+  localStorage.setItem("dynamicBankData",JSON.stringify(data));
   input.value="";
   render();
 }
@@ -145,19 +201,19 @@ function add(){
 function clearAll(){
   if(confirm("確定清除全部資料嗎？")){
     data=[];
-    localStorage.setItem("finalStableData",JSON.stringify(data));
+    localStorage.setItem("dynamicBankData",JSON.stringify(data));
     render();
   }
 }
 
 function del(index){
   data.splice(index,1);
-  localStorage.setItem("finalStableData",JSON.stringify(data));
+  localStorage.setItem("dynamicBankData",JSON.stringify(data));
   render();
 }
 
 function render(){
-  let acc={現金:0,銀行:0,信用卡:0};
+  let acc={};
   let stock=0;
   let income=0;
   let expense=0;
@@ -167,25 +223,34 @@ function render(){
 
   let listHTML="";
 
+  function addAcc(name){
+    if(!acc[name]) acc[name]=0;
+  }
+
   data.forEach((d,i)=>{
     if(d.type==="收入"){
+      addAcc(d.account);
       acc[d.account]+=d.amount;
       income+=d.amount;
     }
 
     if(d.type==="支出"){
+      addAcc(d.account);
       acc[d.account]-=d.amount;
       expense+=d.amount;
       cats[d.category]+=d.amount;
     }
 
     if(d.type==="轉帳"){
+      addAcc(d.from);
+      addAcc(d.to);
       acc[d.from]-=d.amount;
       acc[d.to]+=d.amount;
       transfer+=d.amount;
     }
 
     if(d.type==="投資"){
+      addAcc(d.account);
       acc[d.account]-=d.amount;
       stock+=d.amount;
       invest+=d.amount;
@@ -209,15 +274,20 @@ function render(){
     `;
   });
 
-  let totalAsset = acc.現金 + acc.銀行 + acc.信用卡 + stock;
+  let totalAccount = Object.values(acc).reduce((s,v)=>s+v,0);
+  let totalAsset = totalAccount + stock;
 
-  document.getElementById("assets").innerHTML = `
-    <div class="box">現金<br>${acc.現金}元</div>
-    <div class="box">銀行<br>${acc.銀行}元</div>
-    <div class="box">信用卡<br>${acc.信用卡}元</div>
+  let assetHTML="";
+  Object.keys(acc).forEach(k=>{
+    assetHTML+=`<div class="box">${k}<br>${acc[k]}元</div>`;
+  });
+
+  assetHTML+=`
     <div class="box">股票帳戶<br>${stock}元</div>
     <div class="box">總資產<br>${totalAsset}元</div>
   `;
+
+  document.getElementById("assets").innerHTML = assetHTML || "<p>目前沒有資產資料</p>";
 
   document.getElementById("summary").innerHTML = `
     <div class="box">本月收入<br>${income}元</div>
