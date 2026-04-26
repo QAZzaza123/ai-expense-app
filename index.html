@@ -3,9 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI智慧記帳App｜圖表版</title>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<title>AI智慧記帳App｜收支帳戶版</title>
 
 <style>
 body{
@@ -94,24 +92,34 @@ button.red{
 .hint{
   color:#666;
   font-size:14px;
+  line-height:1.6;
 }
-canvas{
-  max-width:100%;
+.income{
+  color:#1e8449;
+}
+.expense{
+  color:#c0392b;
+}
+.transfer{
+  color:#1f4e79;
 }
 </style>
 </head>
 
 <body>
 
-<header>AI智慧記帳App｜圖表版</header>
+<header>AI智慧記帳App｜收支帳戶版</header>
 
 <div class="container">
 
   <div class="card">
-    <h3>新增記帳</h3>
-    <input id="input" placeholder="例如：早餐60現、股票3000轉、電影450信">
-    <button onclick="addExpense()">新增</button>
-    <p class="hint">支付代碼：現=現金、信=信用卡、轉=轉帳、悠=悠遊卡、L=LINE Pay</p>
+    <h3>新增紀錄</h3>
+    <input id="input" placeholder="例如：早餐60現、薪水30000銀、轉帳1000銀到現">
+    <button onclick="addRecord()">新增</button>
+    <p class="hint">
+      支付 / 帳戶代碼：現=現金、信=信用卡、銀=銀行、悠=悠遊卡、L=LINE Pay<br>
+      支出：早餐60現｜收入：薪水30000銀｜轉帳：轉帳1000銀到現
+    </p>
   </div>
 
   <div class="card">
@@ -120,31 +128,43 @@ canvas{
   </div>
 
   <div class="card">
-    <h3>本月統計</h3>
+    <h3>本月收支統計</h3>
     <div class="summary" id="summary"></div>
   </div>
 
   <div class="card">
-    <h3>本月支出圖表</h3>
-    <canvas id="pieChart"></canvas>
+    <h3>帳戶餘額</h3>
+    <div class="summary" id="accounts"></div>
   </div>
 
   <div class="card">
-    <h3>本月 AI 分析建議</h3>
-    <div class="ai" id="ai">目前尚無資料，請先新增記帳。</div>
+    <h3>AI分析建議</h3>
+    <div class="ai" id="ai">目前尚無資料，請先新增紀錄。</div>
   </div>
 
   <div class="card">
-    <h3>本月記帳紀錄</h3>
-    <div id="list"></div>
+    <h3>支出表</h3>
+    <div id="expenseList"></div>
+  </div>
+
+  <div class="card">
+    <h3>收入表</h3>
+    <div id="incomeList"></div>
+  </div>
+
+  <div class="card">
+    <h3>轉帳紀錄</h3>
+    <div id="transferList"></div>
+  </div>
+
+  <div class="card">
     <button class="red" onclick="clearAll()">清除全部資料</button>
   </div>
 
 </div>
 
 <script>
-let data = JSON.parse(localStorage.getItem("expenseData")) || [];
-let pieChart = null;
+let records = JSON.parse(localStorage.getItem("moneyRecords")) || [];
 
 function getMonthKey(dateObj){
   let y = dateObj.getFullYear();
@@ -152,34 +172,13 @@ function getMonthKey(dateObj){
   return `${y}-${m}`;
 }
 
-function parseInput(text){
-  let num = text.match(/\d+/);
-  if(!num) return null;
-
-  let amount = parseInt(num[0]);
-
-  let name = text
-    .replace(/\d+/g,"")
-    .replace(/[現信轉悠L]/g,"")
-    .trim();
-
-  let pay = "現金";
-  if(text.includes("信")) pay = "信用卡";
-  else if(text.includes("轉")) pay = "轉帳";
-  else if(text.includes("悠")) pay = "悠遊卡";
-  else if(text.includes("L")) pay = "LINE Pay";
-  else if(text.includes("現")) pay = "現金";
-
-  let now = new Date();
-
-  return {
-    date: now.toLocaleDateString("zh-TW"),
-    month: getMonthKey(now),
-    name,
-    amount,
-    pay,
-    category: classify(name)
-  };
+function accountName(code){
+  if(code==="現") return "現金";
+  if(code==="信") return "信用卡";
+  if(code==="銀") return "銀行";
+  if(code==="悠") return "悠遊卡";
+  if(code==="L") return "LINE Pay";
+  return "現金";
 }
 
 function classify(name){
@@ -192,17 +191,68 @@ function classify(name){
   return "其他";
 }
 
-function addExpense(){
+function parseInput(text){
+  let now = new Date();
+  let month = getMonthKey(now);
+  let date = now.toLocaleDateString("zh-TW");
+
+  let amountMatch = text.match(/\d+/);
+  if(!amountMatch) return null;
+
+  let amount = parseInt(amountMatch[0]);
+
+  // 轉帳格式：轉帳1000銀到現
+  if(text.includes("轉帳") && text.includes("到")){
+    let fromCode = text.match(/(現|信|銀|悠|L)到/);
+    let toCode = text.match(/到(現|信|銀|悠|L)/);
+
+    if(!fromCode || !toCode) return null;
+
+    return {
+      type:"轉帳",
+      date,
+      month,
+      name:"轉帳",
+      amount,
+      from:accountName(fromCode[1]),
+      to:accountName(toCode[1])
+    };
+  }
+
+  let accountCode = text.match(/現|信|銀|悠|L/);
+  let account = accountCode ? accountName(accountCode[0]) : "現金";
+
+  let name = text
+    .replace(/\d+/g,"")
+    .replace(/[現信銀悠L]/g,"")
+    .trim();
+
+  let incomeKeywords = /薪水|收入|獎金|打工|退款|零用錢|利息/;
+  let type = incomeKeywords.test(name) ? "收入" : "支出";
+
+  return {
+    type,
+    date,
+    month,
+    name,
+    amount,
+    account,
+    category:type==="支出" ? classify(name) : "收入"
+  };
+}
+
+function addRecord(){
   let input = document.getElementById("input");
   let text = input.value.trim();
 
-  let item = parseInput(text);
-  if(!item || item.name===""){
-    alert("格式錯誤，請輸入例如：早餐60現");
+  let record = parseInput(text);
+
+  if(!record || record.name===""){
+    alert("格式錯誤，請輸入例如：早餐60現、薪水30000銀、轉帳1000銀到現");
     return;
   }
 
-  data.push(item);
+  records.push(record);
   save();
   input.value="";
   updateMonthOptions();
@@ -210,14 +260,14 @@ function addExpense(){
 }
 
 function save(){
-  localStorage.setItem("expenseData", JSON.stringify(data));
+  localStorage.setItem("moneyRecords", JSON.stringify(records));
 }
 
 function updateMonthOptions(){
   let select = document.getElementById("monthSelect");
   let currentValue = select.value;
 
-  let months = [...new Set(data.map(item => item.month))].sort().reverse();
+  let months = [...new Set(records.map(item => item.month))].sort().reverse();
   let currentMonth = getMonthKey(new Date());
 
   if(!months.includes(currentMonth)){
@@ -236,26 +286,21 @@ function updateMonthOptions(){
   select.value = months.includes(currentValue) ? currentValue : currentMonth;
 }
 
-function getFilteredData(){
+function getFilteredRecords(){
   let selectedMonth = document.getElementById("monthSelect").value;
-  return data.filter(item => item.month === selectedMonth);
+  return records.filter(item => item.month === selectedMonth);
 }
 
-function deleteItem(indexInFiltered){
-  let filtered = getFilteredData();
+function deleteRecord(indexInFiltered, type){
+  let filtered = getFilteredRecords().filter(item => item.type === type);
   let target = filtered[indexInFiltered];
 
-  let realIndex = data.findIndex(item =>
-    item.date === target.date &&
-    item.name === target.name &&
-    item.amount === target.amount &&
-    item.pay === target.pay &&
-    item.category === target.category &&
-    item.month === target.month
+  let realIndex = records.findIndex(item =>
+    JSON.stringify(item) === JSON.stringify(target)
   );
 
   if(realIndex !== -1){
-    data.splice(realIndex,1);
+    records.splice(realIndex,1);
     save();
     updateMonthOptions();
     render();
@@ -264,141 +309,169 @@ function deleteItem(indexInFiltered){
 
 function clearAll(){
   if(confirm("確定要清除全部資料嗎？")){
-    data=[];
+    records=[];
     save();
     updateMonthOptions();
     render();
   }
 }
 
-function render(){
-  renderList();
-  renderSummary();
-  renderAI();
-  renderChart();
+function getAccountBalances(){
+  let accounts = {
+    "現金":0,
+    "銀行":0,
+    "悠遊卡":0,
+    "LINE Pay":0,
+    "信用卡":0
+  };
+
+  records.forEach(item=>{
+    if(item.type==="收入"){
+      accounts[item.account] += item.amount;
+    }
+
+    if(item.type==="支出"){
+      accounts[item.account] -= item.amount;
+    }
+
+    if(item.type==="轉帳"){
+      accounts[item.from] -= item.amount;
+      accounts[item.to] += item.amount;
+    }
+  });
+
+  return accounts;
 }
 
-function renderList(){
-  let list = document.getElementById("list");
-  let filtered = getFilteredData();
+function render(){
+  renderSummary();
+  renderAccounts();
+  renderLists();
+  renderAI();
+}
 
-  list.innerHTML = "";
+function renderSummary(){
+  let filtered = getFilteredRecords();
 
-  if(filtered.length===0){
-    list.innerHTML = "<p>本月目前沒有記帳資料</p>";
-    return;
-  }
+  let income = filtered
+    .filter(i=>i.type==="收入")
+    .reduce((s,i)=>s+i.amount,0);
 
-  filtered.forEach((item,index)=>{
-    list.innerHTML += `
-      <div class="item">
-        <div>
-          <b>${item.name}</b> ${item.amount}元<br>
-          <small>${item.date}｜${item.category}｜${item.pay}</small>
-        </div>
-        <button class="delete" onclick="deleteItem(${index})">刪除</button>
-      </div>
+  let expense = filtered
+    .filter(i=>i.type==="支出")
+    .reduce((s,i)=>s+i.amount,0);
+
+  let transfer = filtered
+    .filter(i=>i.type==="轉帳")
+    .reduce((s,i)=>s+i.amount,0);
+
+  let balance = income - expense;
+
+  let summary = document.getElementById("summary");
+  summary.innerHTML = `
+    <div class="box income">本月收入<br>${income}元</div>
+    <div class="box expense">本月支出<br>${expense}元</div>
+    <div class="box transfer">本月轉帳<br>${transfer}元</div>
+    <div class="box">本月結餘<br>${balance}元</div>
+  `;
+
+  let categories = ["餐飲","交通","娛樂","購物","投資","固定支出","其他"];
+  categories.forEach(cat=>{
+    let sum = filtered
+      .filter(i=>i.type==="支出" && i.category===cat)
+      .reduce((s,i)=>s+i.amount,0);
+
+    summary.innerHTML += `<div class="box">${cat}<br>${sum}元</div>`;
+  });
+}
+
+function renderAccounts(){
+  let balances = getAccountBalances();
+  let accounts = document.getElementById("accounts");
+  accounts.innerHTML = "";
+
+  Object.keys(balances).forEach(acc=>{
+    accounts.innerHTML += `
+      <div class="box">${acc}<br>${balances[acc]}元</div>
     `;
   });
 }
 
-function getCategoryTotals(){
-  let filtered = getFilteredData();
-  let categories = ["餐飲","交通","娛樂","購物","投資","固定支出","其他"];
-
-  return categories.map(cat=>{
-    return {
-      cat,
-      sum: filtered
-        .filter(i=>i.category===cat)
-        .reduce((s,i)=>s+i.amount,0)
-    };
-  });
+function renderLists(){
+  renderList("支出","expenseList");
+  renderList("收入","incomeList");
+  renderList("轉帳","transferList");
 }
 
-function renderSummary(){
-  let filtered = getFilteredData();
-  let categories = getCategoryTotals();
-  let summary = document.getElementById("summary");
-  summary.innerHTML = "";
+function renderList(type,id){
+  let list = document.getElementById(id);
+  let filtered = getFilteredRecords().filter(item=>item.type===type);
+  list.innerHTML = "";
 
-  let total = filtered.reduce((s,i)=>s+i.amount,0);
-  let lifeTotal = filtered
-    .filter(i=>i.category!=="投資")
-    .reduce((s,i)=>s+i.amount,0);
-  let investTotal = filtered
-    .filter(i=>i.category==="投資")
-    .reduce((s,i)=>s+i.amount,0);
-
-  summary.innerHTML += `<div class="box">本月總金額<br>${total}元</div>`;
-  summary.innerHTML += `<div class="box">本月生活支出<br>${lifeTotal}元</div>`;
-  summary.innerHTML += `<div class="box">本月投資<br>${investTotal}元</div>`;
-
-  categories.forEach(item=>{
-    summary.innerHTML += `<div class="box">${item.cat}<br>${item.sum}元</div>`;
-  });
-}
-
-function renderChart(){
-  let ctx = document.getElementById("pieChart");
-  let categoryTotals = getCategoryTotals().filter(item => item.sum > 0);
-
-  if(pieChart){
-    pieChart.destroy();
-  }
-
-  if(categoryTotals.length === 0){
+  if(filtered.length===0){
+    list.innerHTML = `<p>本月沒有${type}資料</p>`;
     return;
   }
 
-  pieChart = new Chart(ctx, {
-    type: "pie",
-    data: {
-      labels: categoryTotals.map(item => item.cat),
-      datasets: [{
-        data: categoryTotals.map(item => item.sum)
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: {
-          position: "bottom"
-        }
-      }
+  filtered.forEach((item,index)=>{
+    if(type==="轉帳"){
+      list.innerHTML += `
+        <div class="item">
+          <div>
+            <b>${item.amount}元</b><br>
+            <small>${item.date}｜${item.from} → ${item.to}</small>
+          </div>
+          <button class="delete" onclick="deleteRecord(${index},'${type}')">刪除</button>
+        </div>
+      `;
+    }else{
+      list.innerHTML += `
+        <div class="item">
+          <div>
+            <b>${item.name}</b> ${item.amount}元<br>
+            <small>${item.date}｜${item.category}｜${item.account}</small>
+          </div>
+          <button class="delete" onclick="deleteRecord(${index},'${type}')">刪除</button>
+        </div>
+      `;
     }
   });
 }
 
 function renderAI(){
-  let filtered = getFilteredData();
+  let filtered = getFilteredRecords();
   let ai = document.getElementById("ai");
 
-  if(filtered.length===0){
-    ai.innerHTML = "本月尚無資料，請先新增記帳。";
+  let expenses = filtered.filter(i=>i.type==="支出");
+
+  if(expenses.length===0){
+    ai.innerHTML = "本月尚無支出資料，請先新增紀錄。";
     return;
   }
 
-  let result = getCategoryTotals().filter(item => item.cat !== "投資");
+  let categories = ["餐飲","交通","娛樂","購物","投資","固定支出","其他"];
+
+  let result = categories.map(cat=>{
+    return {
+      cat,
+      sum:expenses
+        .filter(i=>i.category===cat)
+        .reduce((s,i)=>s+i.amount,0)
+    };
+  });
+
   let max = result.reduce((a,b)=> b.sum>a.sum ? b : a);
-  let lifeTotal = result.reduce((s,i)=>s+i.sum,0);
-  let percent = lifeTotal===0 ? 0 : Math.round(max.sum/lifeTotal*100);
+  let totalExpense = expenses.reduce((s,i)=>s+i.amount,0);
+  let percent = Math.round(max.sum / totalExpense * 100);
 
-  let investTotal = filtered
-    .filter(i=>i.category==="投資")
-    .reduce((s,i)=>s+i.amount,0);
-
-  let warning = percent >= 50 ? "⚠️ 本月支出偏高" : "✅ 本月支出正常";
   let advice = percent >= 50
     ? `建議減少「${max.cat}」支出，避免單一類別花費過高。`
-    : "目前本月支出結構正常，請持續保持良好記帳習慣。";
+    : "目前本月支出結構正常，請持續保持。";
 
   ai.innerHTML = `
     本月最大支出類別：<b>${max.cat}</b><br>
     金額：<b>${max.sum}元</b><br>
-    約佔本月生活支出：<b>${percent}%</b><br>
-    本月投資金額：<b>${investTotal}元</b><br>
-    判斷結果：${warning}<br>
+    佔本月支出：約 <b>${percent}%</b><br>
     AI建議：${advice}
   `;
 }
@@ -409,4 +482,3 @@ render();
 
 </body>
 </html>
-
