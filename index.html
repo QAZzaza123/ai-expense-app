@@ -251,7 +251,6 @@ function monthlyData(){
 
 function getAllTimeAssets(){
   let acc = {};
-  let stock = 0;
 
   function addAcc(a){
     if(!acc[a]) acc[a]=0;
@@ -276,27 +275,26 @@ function getAllTimeAssets(){
     }
 
     if(d.type==="投資"){
-      addAcc(d.account);
-      acc[d.account]-=d.amount;
-      stock+=d.amount;
-    }
-  });
+  addAcc(d.account);
+  addAcc("股票帳戶");
 
+  acc[d.account]-=d.amount;
+  acc["股票帳戶"]+=d.amount;
+}
   return {acc,stock};
 }
 
 function renderAssets(){
   let {acc,stock} = getAllTimeAssets();
   let totalAccount = Object.values(acc).reduce((s,v)=>s+v,0);
-  let totalAsset = totalAccount + stock;
+  let totalAsset = totalAccount;;
 
   let html = "";
 
   Object.keys(acc).forEach(k=>{
     html += `<div class="box">${k}<br>${acc[k]}元</div>`;
   });
-
-  html += `<div class="box">股票帳戶<br>${stock}元</div>`;
+  
   html += `<div class="box">總資產<br>${totalAsset}元</div>`;
 
   document.getElementById("assets").innerHTML = html || "<p>目前沒有帳戶資料</p>";
