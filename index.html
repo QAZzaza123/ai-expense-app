@@ -6,15 +6,13 @@
 <title>小豪的記帳小幫手</title>
 
 <style>
-body{margin:0;font-family:Arial,"Microsoft JhengHei";background:#f4f7fb}
-header{background:#1f4e79;color:white;padding:18px;text-align:center;font-size:22px}
-.container{padding:15px;max-width:900px;margin:auto}
-.card{background:white;padding:15px;border-radius:12px;margin-bottom:12px}
-input,select{width:100%;padding:10px;font-size:16px;margin-bottom:8px}
-button{width:100%;padding:10px;background:#1f4e79;color:white;border:none;border-radius:8px}
-.box{background:#eef5fb;padding:10px;margin:5px;border-radius:10px;text-align:center}
-.item{border-bottom:1px solid #ddd;padding:8px}
-.delete{background:#e74c3c;margin-top:5px}
+body{margin:0;font-family:Arial;background:#f4f7fb}
+header{background:#1f4e79;color:white;padding:15px;text-align:center}
+.container{padding:15px}
+.card{background:white;padding:15px;border-radius:10px;margin-bottom:10px}
+input{width:100%;padding:10px;margin-bottom:10px}
+button{width:100%;padding:10px;background:#1f4e79;color:white;border:none}
+.box{background:#eef5fb;padding:10px;margin:5px;border-radius:8px;text-align:center}
 </style>
 </head>
 
@@ -30,54 +28,24 @@ button{width:100%;padding:10px;background:#1f4e79;color:white;border:none;border
 </div>
 
 <div class="card">
-<select id="monthSelect" onchange="render()"></select>
-</div>
-
-<div class="card">
 <h3>資產</h3>
 <div id="assets"></div>
 </div>
 
 <div class="card">
-<h3>本月統計</h3>
-<div id="summary"></div>
+<h3>紀錄</h3>
+<div id="list"></div>
 </div>
-
-<div class="card">
-<h3>AI分析</h3>
-<div id="ai"></div>
-</div>
-
-<div class="card"><h3>支出</h3><div id="expense"></div></div>
-<div class="card"><h3>收入</h3><div id="income"></div></div>
-<div class="card"><h3>轉帳</h3><div id="transfer"></div></div>
-<div class="card"><h3>股票</h3><div id="stock"></div></div>
 
 </div>
 
 <script>
-let data = JSON.parse(localStorage.getItem("finalData")) || [];
-
-function monthKey(d){
- return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
-}
+let data = JSON.parse(localStorage.getItem("fixData")) || [];
 
 function accName(c){
  if(c=="現") return "現金";
  if(c=="銀") return "銀行";
- if(c=="信") return "信用卡";
- if(c=="悠") return "悠遊卡";
- if(c=="L") return "LINE Pay";
  return "銀行";
-}
-
-function classify(n){
- if(/餐|早餐|午餐|晚餐/.test(n)) return "餐飲";
- if(/交通|捷運|公車/台鐵/高鐵.test(n)) return "交通";
- if(/娛樂|電影/.test(n)) return "娛樂";
- if(/購物|衣服/.test(n)) return "購物";
- if(/房租|電費/保險/車貸.test(n)) return "固定支出";
- return "其他";
 }
 
 function parse(t){
@@ -85,125 +53,74 @@ function parse(t){
  if(!num) return null;
  let amount=parseInt(num[0]);
 
- let now=new Date();
- let date=now.toLocaleDateString();
- let month=monthKey(now);
-
+ // 股票投入
  if(t.includes("到股票帳戶")){
-   let code=t.match(/現|銀|信|悠|L/);
-   let acc=code?accName(code[0]):"銀行";
-   return {type:"投資",amount,account:acc,date,month};
+   let acc = t.includes("現") ? "現金" : "銀行";
+   return {type:"投資",amount,account:acc};
  }
 
- if(t.includes("轉帳")&&t.includes("到")){
-   let f=t.match(/(現|銀|信|悠|L)到/);
-   let to=t.match(/到(現|銀|信|悠|L)/);
-   return {type:"轉帳",amount,from:accName(f[1]),to:accName(to[1]),date,month};
+ // 轉帳
+ if(t.includes("轉帳") && t.includes("到")){
+   let from = t.includes("現") ? "現金" : "銀行";
+   let to = t.includes("到現") ? "現金" : "銀行";
+   return {type:"轉帳",amount,from,to};
  }
 
- let code=t.match(/現|銀|信|悠|L/);
- let acc=code?accName(code[0]):"銀行";
- let name=t.replace(/\d+/g,"").replace(/[現銀信悠L]/g,"");
-
- if(/薪水|收入/.test(name)){
-   return {type:"收入",amount,account:acc,name,date,month};
+ // 收入
+ if(t.includes("薪水")){
+   let acc = t.includes("現") ? "現金" : "銀行";
+   return {type:"收入",amount,account:acc};
  }
 
- return {type:"支出",amount,account:acc,name,date,month,cat:classify(name)};
+ // 支出
+ let acc = t.includes("現") ? "現金" : "銀行";
+ return {type:"支出",amount,account:acc};
 }
 
 function add(){
- let t=document.getElementById("input").value;
- let r=parse(t);
- if(!r) return alert("格式錯誤");
+ let text=document.getElementById("input").value;
+ let r=parse(text);
+ if(!r){alert("格式錯誤");return;}
+
  data.push(r);
- localStorage.setItem("finalData",JSON.stringify(data));
- updateMonth();
+ localStorage.setItem("fixData",JSON.stringify(data));
  render();
-}
-
-function updateMonth(){
- let mSel=document.getElementById("monthSelect");
- let months=[...new Set(data.map(d=>d.month))].sort().reverse();
- mSel.innerHTML="";
- months.forEach(m=>{
-  let o=document.createElement("option");
-  o.value=m;o.textContent=m;
-  mSel.appendChild(o);
- });
-}
-
-function filtered(){
- let m=document.getElementById("monthSelect").value;
- return data.filter(d=>d.month==m);
 }
 
 function render(){
- let f=filtered();
- let acc={現金:0,銀行:0,信用卡:0,悠遊卡:0,"LINE Pay":0};
+ let acc={現金:0,銀行:0};
  let stock=0;
 
- let inc=0,exp=0;
+ let list="";
 
- f.forEach(d=>{
-   if(d.type=="收入"){acc[d.account]+=d.amount;inc+=d.amount;}
-   if(d.type=="支出"){acc[d.account]-=d.amount;exp+=d.amount;}
-   if(d.type=="轉帳"){acc[d.from]-=d.amount;acc[d.to]+=d.amount;}
-   if(d.type=="投資"){acc[d.account]-=d.amount;stock+=d.amount;}
+ data.forEach(d=>{
+   if(d.type=="收入") acc[d.account]+=d.amount;
+   if(d.type=="支出") acc[d.account]-=d.amount;
+   if(d.type=="轉帳"){
+     acc[d.from]-=d.amount;
+     acc[d.to]+=d.amount;
+   }
+   if(d.type=="投資"){
+     acc[d.account]-=d.amount;
+     stock+=d.amount;
+   }
+
+   list+=`<div>${d.type} ${d.amount}</div>`;
  });
 
- let totalAsset=stock+Object.values(acc).reduce((s,v)=>s+v,0);
+ document.getElementById("list").innerHTML=list;
 
- let aHTML="";
- Object.keys(acc).forEach(k=>{
-  aHTML+=`<div class="box">${k}<br>${acc[k]}</div>`;
- });
- aHTML+=`<div class="box">股票<br>${stock}</div>`;
- aHTML+=`<div class="box">總資產<br>${totalAsset}</div>`;
- document.getElementById("assets").innerHTML=aHTML;
+ let total = acc.現金 + acc.銀行 + stock;
 
- document.getElementById("summary").innerHTML=
- `<div class="box">收入<br>${inc}</div>
-  <div class="box">支出<br>${exp}</div>
-  <div class="box">結餘<br>${inc-exp}</div>`;
-
- let maxCat={name:"",val:0};
- let cats={};
- f.filter(d=>d.type=="支出").forEach(d=>{
-  cats[d.cat]=(cats[d.cat]||0)+d.amount;
- });
- Object.keys(cats).forEach(c=>{
-  if(cats[c]>maxCat.val){maxCat={name:c,val:cats[c]}}
- });
-
- document.getElementById("ai").innerHTML=
- `最多支出：${maxCat.name||"無"} ${maxCat.val||0}`;
-
- renderList(f);
+ document.getElementById("assets").innerHTML=
+ `
+ <div class="box">現金 ${acc.現金}</div>
+ <div class="box">銀行 ${acc.銀行}</div>
+ <div class="box">股票 ${stock}</div>
+ <div class="box">總資產 ${total}</div>
+ `;
 }
 
-function renderList(f){
- let e="",i="",t="",s="";
- f.forEach((d,idx)=>{
-   let btn=`<button class="delete" onclick="del(${idx})">刪</button>`;
-   if(d.type=="支出") e+=`<div class="item">${d.name} ${d.amount}${btn}</div>`;
-   if(d.type=="收入") i+=`<div class="item">${d.name} ${d.amount}${btn}</div>`;
-   if(d.type=="轉帳") t+=`<div class="item">${d.from}→${d.to} ${d.amount}${btn}</div>`;
-   if(d.type=="投資") s+=`<div class="item">股票 +${d.amount}${btn}</div>`;
- });
- document.getElementById("expense").innerHTML=e;
- document.getElementById("income").innerHTML=i;
- document.getElementById("transfer").innerHTML=t;
- document.getElementById("stock").innerHTML=s;
-}
-
-function del(i){
- data.splice(i,1);
- localStorage.setItem("finalData",JSON.stringify(data));
- render();
-}
-
-updateMonth();
 render();
 </script>
 
