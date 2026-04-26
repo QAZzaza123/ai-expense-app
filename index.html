@@ -39,7 +39,8 @@ canvas{max-width:100%}
 收入：薪水30000玉山<br>
 支出：早餐60現、電影300台新<br>
 轉帳：轉帳5000玉山到台新<br>
-投資：薪水14000玉山到股票帳戶
+投資：薪水14000玉山到股票帳戶<br>
+代碼：現=現金、信=信用卡、銀=銀行、悠=悠遊卡、L=LINE Pay
 </p>
 </div>
 
@@ -54,7 +55,7 @@ canvas{max-width:100%}
 </div>
 
 <div class="card">
-<h3>每月收入支出統計</h3>
+<h3>每月收支統計</h3>
 <div id="summary" class="grid"></div>
 </div>
 
@@ -82,7 +83,7 @@ canvas{max-width:100%}
 </div>
 
 <script>
-let data = JSON.parse(localStorage.getItem("dynamicBankDataV2")) || [];
+let data = JSON.parse(localStorage.getItem("xiaohaoMoneyApp")) || [];
 let pieChart = null;
 
 function today(){
@@ -97,21 +98,23 @@ function monthKey(){
 function normalizeAccount(text){
   if(!text) return "銀行";
   text = text.trim();
+
   if(text==="現") return "現金";
-  if(text==="銀") return "銀行";
   if(text==="信") return "信用卡";
+  if(text==="銀") return "銀行";
   if(text==="悠") return "悠遊卡";
   if(text==="L") return "LINE Pay";
+
   return text;
 }
 
-function classify(t){
-  if(/早餐|午餐|晚餐|飲料|便當|咖啡|麵|飯/.test(t)) return "餐飲";
-  if(/公車|捷運|高鐵|火車|交通|油錢|Uber/.test(t)) return "交通";
-  if(/電影|遊戲|娛樂|Netflix|KTV/.test(t)) return "娛樂";
-  if(/購物|衣服|鞋子|包包|生活用品/.test(t)) return "購物";
-  if(/房租|房貸|保險|電費|水費|手機費|車貸/.test(t)) return "固定支出";
-  if(/醫療|看病|藥/.test(t)) return "醫療";
+function classify(text){
+  if(/早餐|午餐|晚餐|飲料|便當|咖啡|麵|飯/.test(text)) return "餐飲";
+  if(/公車|捷運|高鐵|火車|交通|油錢|Uber/.test(text)) return "交通";
+  if(/電影|遊戲|娛樂|Netflix|KTV|唱歌/.test(text)) return "娛樂";
+  if(/購物|衣服|鞋子|包包|生活用品/.test(text)) return "購物";
+  if(/房租|房貸|保險|電費|水費|手機費/.test(text)) return "固定支出";
+  if(/醫療|看病|藥/.test(text)) return "醫療";
   return "其他";
 }
 
@@ -128,16 +131,16 @@ function parseBasic(text){
   return {name, amount, account};
 }
 
-function parse(t){
-  let num = t.match(/\d+/);
+function parse(text){
+  let num = text.match(/\d+/);
   if(!num) return null;
 
   let amount = parseInt(num[0]);
   let date = today();
   let month = monthKey();
 
-  if(t.includes("到股票帳戶")){
-    let clean = t.replace("到股票帳戶","");
+  if(text.includes("到股票帳戶")){
+    let clean = text.replace("到股票帳戶","");
     let basic = parseBasic(clean);
 
     return {
@@ -151,8 +154,8 @@ function parse(t){
     };
   }
 
-  if(t.includes("轉帳") && t.includes("到")){
-    let clean = t.replace("轉帳","").replace(amount,"");
+  if(text.includes("轉帳") && text.includes("到")){
+    let clean = text.replace("轉帳","").replace(amount,"");
     let parts = clean.split("到");
 
     return {
@@ -165,12 +168,19 @@ function parse(t){
     };
   }
 
-  let basic = parseBasic(t);
+  let basic = parseBasic(text);
   let name = basic.name;
   let account = basic.account;
 
   if(/薪水|收入|獎金|打工|退款|零用錢|利息/.test(name)){
-    return {type:"收入",name,amount,account,date,month};
+    return {
+      type:"收入",
+      name,
+      amount,
+      account,
+      date,
+      month
+    };
   }
 
   return {
@@ -202,7 +212,7 @@ function add(){
 }
 
 function save(){
-  localStorage.setItem("dynamicBankDataV2",JSON.stringify(data));
+  localStorage.setItem("xiaohaoMoneyApp",JSON.stringify(data));
 }
 
 function clearAll(){
@@ -252,8 +262,8 @@ function monthlyData(){
 function getAllTimeAssets(){
   let acc = {};
 
-  function addAcc(a){
-    if(!acc[a]) acc[a]=0;
+  function addAcc(name){
+    if(!acc[name]) acc[name]=0;
   }
 
   data.forEach(d=>{
@@ -275,26 +285,26 @@ function getAllTimeAssets(){
     }
 
     if(d.type==="投資"){
-  addAcc(d.account);
-  addAcc("股票帳戶");
+      addAcc(d.account);
+      addAcc("股票帳戶");
+      acc[d.account]-=d.amount;
+      acc["股票帳戶"]+=d.amount;
+    }
+  });
 
-  acc[d.account]-=d.amount;
-  acc["股票帳戶"]+=d.amount;
-}
-  return {acc,stock};
+  return acc;
 }
 
 function renderAssets(){
-  let {acc,stock} = getAllTimeAssets();
-  let totalAccount = Object.values(acc).reduce((s,v)=>s+v,0);
-  let totalAsset = totalAccount;;
+  let acc = getAllTimeAssets();
+  let totalAsset = Object.values(acc).reduce((s,v)=>s+v,0);
 
   let html = "";
 
   Object.keys(acc).forEach(k=>{
     html += `<div class="box">${k}<br>${acc[k]}元</div>`;
   });
-  
+
   html += `<div class="box">總資產<br>${totalAsset}元</div>`;
 
   document.getElementById("assets").innerHTML = html || "<p>目前沒有帳戶資料</p>";
@@ -380,9 +390,7 @@ function renderChart(){
     },
     options:{
       responsive:true,
-      plugins:{
-        legend:{position:"bottom"}
-      }
+      plugins:{legend:{position:"bottom"}}
     }
   });
 }
