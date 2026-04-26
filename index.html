@@ -2,32 +2,102 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI記帳App</title>
+<title>AI智慧記帳</title>
+<style>
+body { font-family: Arial; padding: 20px; }
+input { padding: 10px; width: 200px; }
+button { padding: 10px; }
+.card { margin-top: 10px; }
+</style>
 </head>
+
 <body>
 
-<h2>AI智慧記帳</h2>
+<h1>AI智慧記帳</h1>
 
-<input id="input" placeholder="例如 早餐60信">
+<input id="input" placeholder="例如 早餐60現">
 <button onclick="add()">新增</button>
 
+<h3>紀錄</h3>
 <ul id="list"></ul>
 
+<h3>統計</h3>
+<div id="total"></div>
+<div id="analysis"></div>
+
 <script>
-function add(){
-let text=document.getElementById("input").value;
-let num=text.match(/\d+/);
-if(!num)return alert("格式錯誤");
+let data = JSON.parse(localStorage.getItem("data")) || [];
 
-let amount=parseInt(num[0]);
-let item=text.replace(/\d+/,"");
+function parse(text){
+  let num = text.match(/\d+/);
+  if(!num) return null;
 
-let li=document.createElement("li");
-li.innerText=item+" "+amount;
+  let amount = parseInt(num[0]);
+  let name = text.replace(/\d+|現|信|轉/g,"");
 
-document.getElementById("list").appendChild(li);
+  let pay = text.includes("現") ? "現金" :
+            text.includes("信") ? "信用卡" :
+            text.includes("轉") ? "轉帳" : "未知";
+
+  let category =
+    name.includes("早餐") || name.includes("午餐") || name.includes("晚餐") ? "餐飲" :
+    name.includes("股票") || name.includes("ETF") ? "投資" :
+    name.includes("高鐵") || name.includes("公車") ? "交通" :
+    name.includes("娛樂") || name.includes("電影") ? "娛樂" :
+    name.includes("房租") || name.includes("保險") ? "固定支出" :
+    "其他";
+
+  return {name, amount, pay, category};
 }
+
+function add(){
+  let text = document.getElementById("input").value;
+  let obj = parse(text);
+
+  if(!obj) return alert("格式錯誤");
+
+  data.push(obj);
+  localStorage.setItem("data", JSON.stringify(data));
+
+  render();
+}
+
+function render(){
+  let list = document.getElementById("list");
+  list.innerHTML = "";
+
+  let total = 0;
+  let categorySum = {};
+
+  data.forEach(item=>{
+    total += item.amount;
+
+    categorySum[item.category] = (categorySum[item.category]||0) + item.amount;
+
+    let li = document.createElement("li");
+    li.innerText = `${item.name} ${item.amount}元（${item.category} / ${item.pay}）`;
+    list.appendChild(li);
+  });
+
+  document.getElementById("total").innerText = "總支出：" + total;
+
+  // 找最大
+  let maxCat = "";
+  let maxVal = 0;
+
+  for(let k in categorySum){
+    if(categorySum[k] > maxVal){
+      maxVal = categorySum[k];
+      maxCat = k;
+    }
+  }
+
+  document.getElementById("analysis").innerText =
+    "AI分析：你花最多在「" + maxCat + "」，建議控制支出";
+
+}
+
+render();
 </script>
 
 </body>
