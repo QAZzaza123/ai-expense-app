@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI智慧記帳App</title>
+<title>AI智慧記帳App｜月份版</title>
 
 <style>
 body{
@@ -32,13 +32,14 @@ header{
   margin-bottom:15px;
   box-shadow:0 3px 10px rgba(0,0,0,0.08);
 }
-input{
+input,select{
   width:100%;
   box-sizing:border-box;
   padding:13px;
   font-size:18px;
   border:1px solid #ccc;
   border-radius:10px;
+  margin-bottom:10px;
 }
 button{
   width:100%;
@@ -98,7 +99,7 @@ button.red{
 
 <body>
 
-<header>AI智慧記帳App</header>
+<header>AI智慧記帳App｜月份統整版</header>
 
 <div class="container">
 
@@ -110,17 +111,22 @@ button.red{
   </div>
 
   <div class="card">
-    <h3>統計總覽</h3>
+    <h3>月份選擇</h3>
+    <select id="monthSelect" onchange="render()"></select>
+  </div>
+
+  <div class="card">
+    <h3>本月統計</h3>
     <div class="summary" id="summary"></div>
   </div>
 
   <div class="card">
-    <h3>AI分析建議</h3>
+    <h3>本月 AI 分析建議</h3>
     <div class="ai" id="ai">目前尚無資料，請先新增記帳。</div>
   </div>
 
   <div class="card">
-    <h3>記帳紀錄</h3>
+    <h3>本月記帳紀錄</h3>
     <div id="list"></div>
     <button class="red" onclick="clearAll()">清除全部資料</button>
   </div>
@@ -129,6 +135,12 @@ button.red{
 
 <script>
 let data = JSON.parse(localStorage.getItem("expenseData")) || [];
+
+function getMonthKey(dateObj){
+  let y = dateObj.getFullYear();
+  let m = String(dateObj.getMonth()+1).padStart(2,"0");
+  return `${y}-${m}`;
+}
 
 function parseInput(text){
   let num = text.match(/\d+/);
@@ -148,14 +160,15 @@ function parseInput(text){
   else if(text.includes("L")) pay = "LINE Pay";
   else if(text.includes("現")) pay = "現金";
 
-  let category = classify(name);
+  let now = new Date();
 
   return {
-    date:new Date().toLocaleDateString("zh-TW"),
+    date: now.toLocaleDateString("zh-TW"),
+    month: getMonthKey(now),
     name,
     amount,
     pay,
-    category
+    category: classify(name)
   };
 }
 
@@ -182,6 +195,7 @@ function addExpense(){
   data.push(item);
   save();
   input.value="";
+  updateMonthOptions();
   render();
 }
 
@@ -189,18 +203,67 @@ function save(){
   localStorage.setItem("expenseData", JSON.stringify(data));
 }
 
-function deleteItem(index){
-  data.splice(index,1);
-  save();
-  render();
+function deleteItem(indexInFiltered){
+  let selectedMonth = document.getElementById("monthSelect").value;
+  let filtered = getFilteredData();
+  let target = filtered[indexInFiltered];
+
+  let realIndex = data.findIndex(item =>
+    item.date === target.date &&
+    item.name === target.name &&
+    item.amount === target.amount &&
+    item.pay === target.pay &&
+    item.category === target.category &&
+    item.month === target.month
+  );
+
+  if(realIndex !== -1){
+    data.splice(realIndex,1);
+    save();
+    updateMonthOptions();
+    render();
+  }
 }
 
 function clearAll(){
   if(confirm("確定要清除全部資料嗎？")){
     data=[];
     save();
+    updateMonthOptions();
     render();
   }
+}
+
+function updateMonthOptions(){
+  let select = document.getElementById("monthSelect");
+  let currentValue = select.value;
+
+  let months = [...new Set(data.map(item => item.month))].sort().reverse();
+  let currentMonth = getMonthKey(new Date());
+
+  if(!months.includes(currentMonth)){
+    months.unshift(currentMonth);
+  }
+
+  select.innerHTML = "";
+
+  months.forEach(month=>{
+    let option = document.createElement("option");
+    option.value = month;
+    option.textContent = month;
+    select.appendChild(option);
+  });
+
+  if(months.includes(currentValue)){
+    select.value = currentValue;
+  }else{
+    select.value = currentMonth;
+  }
+}
+
+function getFilteredData(){
+  let selectedMonth = document.getElementById("monthSelect").value;
+  return data.filter(item => item.month === selectedMonth);
 }
 
 function render(){
@@ -211,14 +274,16 @@ function render(){
 
 function renderList(){
   let list = document.getElementById("list");
+  let filtered = getFilteredData();
+
   list.innerHTML = "";
 
-  if(data.length===0){
-    list.innerHTML = "<p>目前沒有記帳資料</p>";
+  if(filtered.length===0){
+    list.innerHTML = "<p>本月目前沒有記帳資料</p>";
     return;
   }
 
-  data.forEach((item,index)=>{
+  filtered.forEach((item,index)=>{
     list.innerHTML += `
       <div class="item">
         <div>
@@ -232,20 +297,25 @@ function renderList(){
 }
 
 function renderSummary(){
+  let filtered = getFilteredData();
   let categories = ["餐飲","交通","娛樂","購物","投資","固定支出","其他"];
   let summary = document.getElementById("summary");
   summary.innerHTML = "";
 
-  let total = data.reduce((s,i)=>s+i.amount,0);
-  let lifeTotal = data
+  let total = filtered.reduce((s,i)=>s+i.amount,0);
+  let lifeTotal = filtered
     .filter(i=>i.category!=="投資")
     .reduce((s,i)=>s+i.amount,0);
+  let investTotal = filtered
+    .filter(i=>i.category==="投資")
+    .reduce((s,i)=>s+i.amount,0);
 
-  summary.innerHTML += `<div class="box">總金額<br>${total}元</div>`;
-  summary.innerHTML += `<div class="box">生活支出<br>${lifeTotal}元</div>`;
+  summary.innerHTML += `<div class="box">本月總金額<br>${total}元</div>`;
+  summary.innerHTML += `<div class="box">本月生活支出<br>${lifeTotal}元</div>`;
+  summary.innerHTML += `<div class="box">本月投資<br>${investTotal}元</div>`;
 
   categories.forEach(cat=>{
-    let sum = data
+    let sum = filtered
       .filter(i=>i.category===cat)
       .reduce((s,i)=>s+i.amount,0);
 
@@ -254,10 +324,11 @@ function renderSummary(){
 }
 
 function renderAI(){
+  let filtered = getFilteredData();
   let ai = document.getElementById("ai");
 
-  if(data.length===0){
-    ai.innerHTML = "目前尚無資料，請先新增記帳。";
+  if(filtered.length===0){
+    ai.innerHTML = "本月尚無資料，請先新增記帳。";
     return;
   }
 
@@ -265,7 +336,7 @@ function renderAI(){
   let result = categories.map(cat=>{
     return {
       cat,
-      sum:data
+      sum:filtered
         .filter(i=>i.category===cat)
         .reduce((s,i)=>s+i.amount,0)
     };
@@ -275,20 +346,26 @@ function renderAI(){
   let lifeTotal = result.reduce((s,i)=>s+i.sum,0);
   let percent = lifeTotal===0 ? 0 : Math.round(max.sum/lifeTotal*100);
 
-  let warning = percent >= 50 ? "⚠️ 支出偏高" : "✅ 支出正常";
+  let investTotal = filtered
+    .filter(i=>i.category==="投資")
+    .reduce((s,i)=>s+i.amount,0);
+
+  let warning = percent >= 50 ? "⚠️ 本月支出偏高" : "✅ 本月支出正常";
   let advice = percent >= 50
     ? `建議減少「${max.cat}」支出，避免單一類別花費過高。`
-    : "目前支出結構正常，請持續保持良好記帳習慣。";
+    : "目前本月支出結構正常，請持續保持良好記帳習慣。";
 
   ai.innerHTML = `
-    最大支出類別：<b>${max.cat}</b><br>
+    本月最大支出類別：<b>${max.cat}</b><br>
     金額：<b>${max.sum}元</b><br>
-    佔生活支出：約 <b>${percent}%</b><br>
+    約佔本月生活支出：<b>${percent}%</b><br>
+    本月投資金額：<b>${investTotal}元</b><br>
     判斷結果：${warning}<br>
     AI建議：${advice}
   `;
 }
 
+updateMonthOptions();
 render();
 </script>
 
