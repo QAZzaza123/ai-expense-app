@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>小豪的記帳小幫手</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <style>
 body{margin:0;font-family:Arial,"Microsoft JhengHei";background:#f4f7fb;color:#222}
 header{background:#1f4e79;color:white;padding:18px;text-align:center;font-size:24px;font-weight:bold}
@@ -17,19 +16,23 @@ button.red{background:#c0392b}
 button.small{width:auto;padding:6px 10px;font-size:14px;background:#e74c3c}
 .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .box{background:#eef5fb;border-radius:12px;padding:12px;text-align:center;font-weight:bold}
-.ai{background:#fff7e6;border-left:6px solid #f0a500;padding:12px;border-radius:10px;line-height:1.7}
 .item{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #ddd;padding:10px 0}
-small{color:#666}
-.hint{font-size:14px;color:#666;line-height:1.6}
 canvas{max-width:100%}
+.hint{font-size:14px;color:#666;line-height:1.6}
 </style>
 </head>
 
 <body>
-
 <header>小豪的記帳小幫手</header>
 
 <div class="container">
+
+<div class="card">
+<h3>新增帳戶</h3>
+<input id="accName" placeholder="帳戶名稱：玉山、台新、現金">
+<input id="accMoney" placeholder="初始金額">
+<button onclick="addAccount()">新增帳戶</button>
+</div>
 
 <div class="card">
 <h3>新增紀錄</h3>
@@ -37,15 +40,14 @@ canvas{max-width:100%}
 <button onclick="add()">新增</button>
 <p class="hint">
 收入：薪水30000玉山<br>
-支出：早餐60現、電影300台新<br>
+支出：早餐60現<br>
 轉帳：轉帳5000玉山到台新<br>
-投資：薪水14000玉山到股票帳戶<br>
-代碼：現=現金、信=信用卡、銀=銀行、悠=悠遊卡、L=LINE Pay
+投資：薪水14000玉山到股票帳戶
 </p>
 </div>
 
 <div class="card">
-<h3>月份選擇</h3>
+<h3>月份切換</h3>
 <select id="monthSelect" onchange="render()"></select>
 </div>
 
@@ -65,13 +67,8 @@ canvas{max-width:100%}
 </div>
 
 <div class="card">
-<h3>支出圓餅圖</h3>
-<canvas id="pieChart"></canvas>
-</div>
-
-<div class="card">
-<h3>AI分析建議</h3>
-<div id="ai" class="ai"></div>
+<h3>本月支出圓餅圖</h3>
+<canvas id="chart"></canvas>
 </div>
 
 <div class="card">
@@ -83,52 +80,58 @@ canvas{max-width:100%}
 </div>
 
 <script>
-let data = JSON.parse(localStorage.getItem("xiaohaoMoneyApp")) || [];
+let data = JSON.parse(localStorage.getItem("moneyDataMonth")) || [];
+let accounts = JSON.parse(localStorage.getItem("moneyAccountsMonth")) || {};
 let pieChart = null;
+
+function getMonth(){
+  let d = new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+}
 
 function today(){
   return new Date().toLocaleDateString("zh-TW");
 }
 
-function monthKey(){
-  let d = new Date();
-  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+function normalizeAccount(name){
+  if(!name) return "銀行";
+  name = name.trim();
+  if(name==="現") return "現金";
+  if(name==="銀") return "銀行";
+  if(name==="信") return "信用卡";
+  if(name==="悠") return "悠遊卡";
+  if(name==="L") return "LINE Pay";
+  return name;
 }
 
-function normalizeAccount(text){
-  if(!text) return "銀行";
-  text = text.trim();
-
-  if(text==="現") return "現金";
-  if(text==="信") return "信用卡";
-  if(text==="銀") return "銀行";
-  if(text==="悠") return "悠遊卡";
-  if(text==="L") return "LINE Pay";
-
-  return text;
-}
-
-function classify(text){
-  if(/早餐|午餐|晚餐|飲料|便當|咖啡|麵|飯/.test(text)) return "餐飲";
-  if(/公車|捷運|高鐵|火車|交通|油錢|Uber/.test(text)) return "交通";
-  if(/電影|遊戲|娛樂|Netflix|KTV|唱歌/.test(text)) return "娛樂";
-  if(/購物|衣服|鞋子|包包|生活用品/.test(text)) return "購物";
-  if(/房租|房貸|保險|電費|水費|手機費/.test(text)) return "固定支出";
-  if(/醫療|看病|藥/.test(text)) return "醫療";
+function classify(name){
+  if(/早餐|午餐|晚餐|飲料|便當|咖啡|麵|飯/.test(name)) return "餐飲";
+  if(/公車|捷運|高鐵|火車|交通|油錢|Uber/.test(name)) return "交通";
+  if(/電影|遊戲|娛樂|Netflix|KTV/.test(name)) return "娛樂";
+  if(/購物|衣服|鞋子|包包|生活用品/.test(name)) return "購物";
+  if(/房租|房貸|保險|電費|水費|手機費/.test(name)) return "固定支出";
+  if(/醫療|看病|藥/.test(name)) return "醫療";
   return "其他";
 }
 
-function parseBasic(text){
-  let num = text.match(/\d+/);
-  if(!num) return null;
+function save(){
+  localStorage.setItem("moneyDataMonth",JSON.stringify(data));
+  localStorage.setItem("moneyAccountsMonth",JSON.stringify(accounts));
+}
 
-  let amount = parseInt(num[0]);
-  let parts = text.split(num[0]);
+function addAccount(){
+  let name = document.getElementById("accName").value.trim();
+  let money = parseInt(document.getElementById("accMoney").value) || 0;
 
-  let name = parts[0].trim();
-  let account = normalizeAccount(parts[1]);
+  if(!name) return alert("請輸入帳戶名稱");
 
-  return {name, amount, account};
+  accounts[name] = (accounts[name] || 0) + money;
+
+  document.getElementById("accName").value="";
+  document.getElementById("accMoney").value="";
+
+  save();
+  render();
 }
 
 function parse(text){
@@ -137,21 +140,15 @@ function parse(text){
 
   let amount = parseInt(num[0]);
   let date = today();
-  let month = monthKey();
+  let month = getMonth();
 
   if(text.includes("到股票帳戶")){
     let clean = text.replace("到股票帳戶","");
-    let basic = parseBasic(clean);
+    let parts = clean.split(amount);
+    let name = parts[0].trim() || "投入股票帳戶";
+    let account = normalizeAccount(parts[1]);
 
-    return {
-      type:"投資",
-      name:basic.name || "投入股票帳戶",
-      amount,
-      account:basic.account || "銀行",
-      date,
-      month,
-      category:"投資"
-    };
+    return {type:"投資",name,amount,account,category:"投資",date,month};
   }
 
   if(text.includes("轉帳") && text.includes("到")){
@@ -168,64 +165,45 @@ function parse(text){
     };
   }
 
-  let basic = parseBasic(text);
-  let name = basic.name;
-  let account = basic.account;
+  let parts = text.split(amount);
+  let name = parts[0].trim();
+  let account = normalizeAccount(parts[1]);
 
   if(/薪水|收入|獎金|打工|退款|零用錢|利息/.test(name)){
-    return {
-      type:"收入",
-      name,
-      amount,
-      account,
-      date,
-      month
-    };
+    return {type:"收入",name,amount,account,date,month};
   }
 
-  return {
-    type:"支出",
-    name,
-    amount,
-    account,
-    date,
-    month,
-    category:classify(name)
-  };
+  return {type:"支出",name,amount,account,category:classify(name),date,month};
 }
 
 function add(){
   let input = document.getElementById("input");
   let text = input.value.trim();
-  let record = parse(text);
+  let r = parse(text);
 
-  if(!record){
-    alert("格式錯誤，請輸入：早餐60現、薪水30000玉山、轉帳5000玉山到台新");
-    return;
+  if(!r) return alert("格式錯誤");
+
+  data.push(r);
+
+  if(r.type==="收入"){
+    accounts[r.account]=(accounts[r.account]||0)+r.amount;
   }
 
-  data.push(record);
-  save();
+  if(r.type==="支出"){
+    accounts[r.account]=(accounts[r.account]||0)-r.amount;
+  }
+
+  if(r.type==="轉帳"){
+    accounts[r.from]=(accounts[r.from]||0)-r.amount;
+    accounts[r.to]=(accounts[r.to]||0)+r.amount;
+  }
+
+  if(r.type==="投資"){
+    accounts[r.account]=(accounts[r.account]||0)-r.amount;
+    accounts["股票帳戶"]=(accounts["股票帳戶"]||0)+r.amount;
+  }
+
   input.value="";
-  updateMonthOptions();
-  render();
-}
-
-function save(){
-  localStorage.setItem("xiaohaoMoneyApp",JSON.stringify(data));
-}
-
-function clearAll(){
-  if(confirm("確定清除全部資料嗎？")){
-    data=[];
-    save();
-    updateMonthOptions();
-    render();
-  }
-}
-
-function del(realIndex){
-  data.splice(realIndex,1);
   save();
   updateMonthOptions();
   render();
@@ -234,10 +212,11 @@ function del(realIndex){
 function updateMonthOptions(){
   let select = document.getElementById("monthSelect");
   let old = select.value;
-  let months = [...new Set(data.map(d=>d.month))].sort().reverse();
-  let nowMonth = monthKey();
 
-  if(!months.includes(nowMonth)) months.unshift(nowMonth);
+  let months = [...new Set(data.map(d=>d.month))].sort().reverse();
+  let now = getMonth();
+
+  if(!months.includes(now)) months.unshift(now);
 
   select.innerHTML="";
   months.forEach(m=>{
@@ -247,105 +226,82 @@ function updateMonthOptions(){
     select.appendChild(opt);
   });
 
-  select.value = months.includes(old) ? old : nowMonth;
+  select.value = months.includes(old) ? old : now;
 }
 
 function selectedMonth(){
   return document.getElementById("monthSelect").value;
 }
 
-function monthlyData(){
+function monthData(){
   let m = selectedMonth();
   return data.map((d,i)=>({...d,realIndex:i})).filter(d=>d.month===m);
 }
 
-function getAllTimeAssets(){
-  let acc = {};
+function clearAll(){
+  if(confirm("確定清除全部資料嗎？")){
+    data=[];
+    accounts={};
+    save();
+    updateMonthOptions();
+    render();
+  }
+}
 
-  function addAcc(name){
-    if(!acc[name]) acc[name]=0;
+function del(i){
+  let r = data[i];
+
+  if(r.type==="收入") accounts[r.account]-=r.amount;
+  if(r.type==="支出") accounts[r.account]+=r.amount;
+  if(r.type==="轉帳"){
+    accounts[r.from]+=r.amount;
+    accounts[r.to]-=r.amount;
+  }
+  if(r.type==="投資"){
+    accounts[r.account]+=r.amount;
+    accounts["股票帳戶"]-=r.amount;
   }
 
-  data.forEach(d=>{
-    if(d.type==="收入"){
-      addAcc(d.account);
-      acc[d.account]+=d.amount;
-    }
-
-    if(d.type==="支出"){
-      addAcc(d.account);
-      acc[d.account]-=d.amount;
-    }
-
-    if(d.type==="轉帳"){
-      addAcc(d.from);
-      addAcc(d.to);
-      acc[d.from]-=d.amount;
-      acc[d.to]+=d.amount;
-    }
-
-    if(d.type==="投資"){
-      addAcc(d.account);
-      addAcc("股票帳戶");
-      acc[d.account]-=d.amount;
-      acc["股票帳戶"]+=d.amount;
-    }
-  });
-
-  return acc;
+  data.splice(i,1);
+  save();
+  updateMonthOptions();
+  render();
 }
 
 function renderAssets(){
-  let acc = getAllTimeAssets();
-  let totalAsset = Object.values(acc).reduce((s,v)=>s+v,0);
+  let html="";
+  let total=0;
 
-  let html = "";
-
-  Object.keys(acc).forEach(k=>{
-    html += `<div class="box">${k}<br>${acc[k]}元</div>`;
+  Object.keys(accounts).forEach(k=>{
+    html += `<div class="box">${k}<br>${accounts[k]}元</div>`;
+    total += accounts[k];
   });
 
-  html += `<div class="box">總資產<br>${totalAsset}元</div>`;
+  html += `<div class="box">總資產<br>${total}元</div>`;
 
   document.getElementById("assets").innerHTML = html || "<p>目前沒有帳戶資料</p>";
 }
 
-function getMonthStats(){
-  let f = monthlyData();
+function renderSummary(){
+  let f = monthData();
 
   let income = f.filter(d=>d.type==="收入").reduce((s,d)=>s+d.amount,0);
   let expense = f.filter(d=>d.type==="支出").reduce((s,d)=>s+d.amount,0);
   let invest = f.filter(d=>d.type==="投資").reduce((s,d)=>s+d.amount,0);
   let transfer = f.filter(d=>d.type==="轉帳").reduce((s,d)=>s+d.amount,0);
-  let balance = income - expense - invest;
-
-  return {income,expense,invest,transfer,balance};
-}
-
-function renderSummary(){
-  let s = getMonthStats();
 
   document.getElementById("summary").innerHTML = `
-    <div class="box">本月收入<br>${s.income}元</div>
-    <div class="box">本月支出<br>${s.expense}元</div>
-    <div class="box">本月投資<br>${s.invest}元</div>
-    <div class="box">本月轉帳<br>${s.transfer}元</div>
-    <div class="box">本月結餘<br>${s.balance}元</div>
+    <div class="box">本月收入<br>${income}元</div>
+    <div class="box">本月支出<br>${expense}元</div>
+    <div class="box">本月投資<br>${invest}元</div>
+    <div class="box">本月轉帳<br>${transfer}元</div>
+    <div class="box">本月結餘<br>${income-expense-invest}元</div>
   `;
 }
 
 function getCategoryTotals(){
-  let f = monthlyData();
-  let cats = {
-    餐飲:0,
-    交通:0,
-    娛樂:0,
-    購物:0,
-    固定支出:0,
-    醫療:0,
-    其他:0,
-    投資:0
-  };
+  let f = monthData();
+  let cats={餐飲:0,交通:0,娛樂:0,購物:0,固定支出:0,醫療:0,其他:0,投資:0};
 
   f.forEach(d=>{
     if(d.type==="支出") cats[d.category]+=d.amount;
@@ -357,24 +313,24 @@ function getCategoryTotals(){
 
 function renderCategory(){
   let cats = getCategoryTotals();
-  let html = "";
+  let html="";
 
-  Object.keys(cats).forEach(c=>{
-    html += `<div class="box">${c}<br>${cats[c]}元</div>`;
+  Object.keys(cats).forEach(k=>{
+    html += `<div class="box">${k}<br>${cats[k]}元</div>`;
   });
 
-  document.getElementById("category").innerHTML = html;
+  document.getElementById("category").innerHTML=html;
 }
 
 function renderChart(){
   let cats = getCategoryTotals();
-  let labels = [];
-  let values = [];
+  let labels=[];
+  let values=[];
 
-  Object.keys(cats).forEach(c=>{
-    if(cats[c]>0){
-      labels.push(c);
-      values.push(cats[c]);
+  Object.keys(cats).forEach(k=>{
+    if(cats[k]>0){
+      labels.push(k);
+      values.push(cats[k]);
     }
   });
 
@@ -382,59 +338,19 @@ function renderChart(){
 
   if(values.length===0) return;
 
-  pieChart = new Chart(document.getElementById("pieChart"),{
+  pieChart = new Chart(document.getElementById("chart"),{
     type:"pie",
-    data:{
-      labels:labels,
-      datasets:[{data:values}]
-    },
-    options:{
-      responsive:true,
-      plugins:{legend:{position:"bottom"}}
-    }
+    data:{labels:labels,datasets:[{data:values}]},
+    options:{responsive:true,plugins:{legend:{position:"bottom"}}}
   });
-}
-
-function renderAI(){
-  let cats = getCategoryTotals();
-  let expenseCats = Object.keys(cats).filter(c=>c!=="投資");
-
-  let maxCat="無";
-  let maxVal=0;
-
-  expenseCats.forEach(c=>{
-    if(cats[c]>maxVal){
-      maxVal=cats[c];
-      maxCat=c;
-    }
-  });
-
-  let totalExpense = expenseCats.reduce((s,c)=>s+cats[c],0);
-
-  if(totalExpense===0){
-    document.getElementById("ai").innerHTML="本月尚無支出資料，請先新增紀錄。";
-    return;
-  }
-
-  let percent = Math.round(maxVal/totalExpense*100);
-  let advice = percent>=50
-    ? `建議減少「${maxCat}」支出，避免單一類別花費過高。`
-    : "目前支出結構正常，請持續保持。";
-
-  document.getElementById("ai").innerHTML = `
-    本月最大支出類別：<b>${maxCat}</b><br>
-    金額：<b>${maxVal}元</b><br>
-    佔本月支出：約 <b>${percent}%</b><br>
-    AI建議：${advice}
-  `;
 }
 
 function renderList(){
-  let f = monthlyData();
-  let html = "";
+  let f = monthData();
+  let html="";
 
   f.forEach(d=>{
-    let text = "";
+    let text="";
 
     if(d.type==="收入") text=`收入｜${d.name}｜${d.amount}元｜${d.account}`;
     if(d.type==="支出") text=`支出｜${d.name}｜${d.amount}元｜${d.category}｜${d.account}`;
@@ -460,7 +376,6 @@ function render(){
   renderSummary();
   renderCategory();
   renderChart();
-  renderAI();
   renderList();
 }
 
