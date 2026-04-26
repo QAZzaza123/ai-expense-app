@@ -6,25 +6,15 @@
 <title>小豪的記帳小幫手</title>
 
 <style>
-body{margin:0;font-family:Arial,"Microsoft JhengHei",sans-serif;background:#f4f7fb;color:#222}
-header{background:#1f4e79;color:white;padding:18px;text-align:center;font-size:24px;font-weight:bold}
+body{margin:0;font-family:Arial,"Microsoft JhengHei";background:#f4f7fb}
+header{background:#1f4e79;color:white;padding:18px;text-align:center;font-size:22px}
 .container{padding:15px;max-width:900px;margin:auto}
-.card{background:white;border-radius:14px;padding:15px;margin-bottom:15px;box-shadow:0 3px 10px rgba(0,0,0,.08)}
-input,select{width:100%;box-sizing:border-box;padding:13px;font-size:18px;border:1px solid #ccc;border-radius:10px;margin-bottom:10px}
-button{width:100%;margin-top:10px;padding:13px;border:none;border-radius:10px;background:#1f4e79;color:white;font-size:18px}
-button.red{background:#c0392b}
-.summary{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
-.box{background:#eef5fb;border-radius:12px;padding:12px;text-align:center;font-weight:bold}
-.asset{background:#eafaf1}
-.stock{background:#fff3cd}
-.ai{background:#fff7e6;border-left:6px solid #f0a500;padding:12px;border-radius:10px;line-height:1.7}
-.item{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #ddd;padding:10px 0}
-.item small{color:#666}
-.delete{background:#e74c3c;width:auto;padding:6px 10px;font-size:14px}
-.hint{color:#666;font-size:14px;line-height:1.6}
-.income{color:#1e8449}
-.expense{color:#c0392b}
-.transfer{color:#1f4e79}
+.card{background:white;padding:15px;border-radius:12px;margin-bottom:12px}
+input,select{width:100%;padding:10px;font-size:16px;margin-bottom:8px}
+button{width:100%;padding:10px;background:#1f4e79;color:white;border:none;border-radius:8px}
+.box{background:#eef5fb;padding:10px;margin:5px;border-radius:10px;text-align:center}
+.item{border-bottom:1px solid #ddd;padding:8px}
+.delete{background:#e74c3c;margin-top:5px}
 </style>
 </head>
 
@@ -34,354 +24,186 @@ button.red{background:#c0392b}
 
 <div class="container">
 
-  <div class="card">
-    <h3>新增紀錄</h3>
-    <input id="input" placeholder="早餐60現、薪水30000銀、轉帳1000銀到現、股票價值50000">
-    <button onclick="addRecord()">新增</button>
-    <p class="hint">
-      帳戶代碼：現=現金、銀=銀行、信=信用卡、悠=悠遊卡、L=LINE Pay<br>
-      支出：早餐60現<br>
-      收入：薪水30000銀<br>
-      轉帳：轉帳1000銀到現<br>
-      股票帳戶：股票價值50000
-    </p>
-  </div>
+<div class="card">
+<input id="input" placeholder="早餐60現 / 薪水30000銀 / 轉帳1000銀到現 / 薪水14000到股票帳戶">
+<button onclick="add()">新增</button>
+</div>
 
-  <div class="card">
-    <h3>月份選擇</h3>
-    <select id="monthSelect" onchange="render()"></select>
-  </div>
+<div class="card">
+<select id="monthSelect" onchange="render()"></select>
+</div>
 
-  <div class="card">
-    <h3>資產總覽</h3>
-    <div class="summary" id="assets"></div>
-  </div>
+<div class="card">
+<h3>資產</h3>
+<div id="assets"></div>
+</div>
 
-  <div class="card">
-    <h3>本月收支統計</h3>
-    <div class="summary" id="summary"></div>
-  </div>
+<div class="card">
+<h3>本月統計</h3>
+<div id="summary"></div>
+</div>
 
-  <div class="card">
-    <h3>AI分析建議</h3>
-    <div class="ai" id="ai">目前尚無資料，請先新增紀錄。</div>
-  </div>
+<div class="card">
+<h3>AI分析</h3>
+<div id="ai"></div>
+</div>
 
-  <div class="card">
-    <h3>支出表</h3>
-    <div id="expenseList"></div>
-  </div>
-
-  <div class="card">
-    <h3>收入表</h3>
-    <div id="incomeList"></div>
-  </div>
-
-  <div class="card">
-    <h3>轉帳紀錄</h3>
-    <div id="transferList"></div>
-  </div>
-
-  <div class="card">
-    <h3>股票帳戶紀錄</h3>
-    <div id="stockList"></div>
-  </div>
-
-  <div class="card">
-    <button class="red" onclick="clearAll()">清除全部資料</button>
-  </div>
+<div class="card"><h3>支出</h3><div id="expense"></div></div>
+<div class="card"><h3>收入</h3><div id="income"></div></div>
+<div class="card"><h3>轉帳</h3><div id="transfer"></div></div>
+<div class="card"><h3>股票</h3><div id="stock"></div></div>
 
 </div>
 
 <script>
-let records = JSON.parse(localStorage.getItem("moneyRecordsV2")) || [];
+let data = JSON.parse(localStorage.getItem("finalData")) || [];
 
-function getMonthKey(dateObj){
-  let y=dateObj.getFullYear();
-  let m=String(dateObj.getMonth()+1).padStart(2,"0");
-  return `${y}-${m}`;
+function monthKey(d){
+ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
 }
 
-function accountName(code){
-  if(code==="現") return "現金";
-  if(code==="銀") return "銀行";
-  if(code==="信") return "信用卡";
-  if(code==="悠") return "悠遊卡";
-  if(code==="L") return "LINE Pay";
-  return "現金";
+function accName(c){
+ if(c=="現") return "現金";
+ if(c=="銀") return "銀行";
+ if(c=="信") return "信用卡";
+ if(c=="悠") return "悠遊卡";
+ if(c=="L") return "LINE Pay";
+ return "銀行";
 }
 
-function classify(name){
-  if(/早餐|午餐|晚餐|飲料|便當|咖啡|麵|飯/.test(name)) return "餐飲";
-  if(/公車|捷運|高鐵|火車|交通|油錢|Uber/.test(name)) return "交通";
-  if(/娛樂|電影|遊戲|Netflix|KTV|唱歌/.test(name)) return "娛樂";
-  if(/購物|衣服|鞋子|包包|生活用品/.test(name)) return "購物";
-  if(/房租|房貸|保險|電費|水費|手機費/.test(name)) return "固定支出";
-  if(/醫療|看病|藥/.test(name)) return "醫療";
-  return "其他";
+function classify(n){
+ if(/餐|早餐|午餐|晚餐/.test(n)) return "餐飲";
+ if(/交通|捷運|公車/台鐵/高鐵.test(n)) return "交通";
+ if(/娛樂|電影/.test(n)) return "娛樂";
+ if(/購物|衣服/.test(n)) return "購物";
+ if(/房租|電費/保險/車貸.test(n)) return "固定支出";
+ return "其他";
 }
 
-function parseInput(text){
-  let now=new Date();
-  let date=now.toLocaleDateString("zh-TW");
-  let month=getMonthKey(now);
-  let amountMatch=text.match(/\d+/);
-  if(!amountMatch) return null;
-  let amount=parseInt(amountMatch[0]);
+function parse(t){
+ let num=t.match(/\d+/);
+ if(!num) return null;
+ let amount=parseInt(num[0]);
 
-  if(text.includes("股票價值")){
-    return {type:"股票價值",date,month,name:"股票帳戶價值",amount};
-  }
+ let now=new Date();
+ let date=now.toLocaleDateString();
+ let month=monthKey(now);
 
-  if(text.includes("轉帳") && text.includes("到")){
-    let from=text.match(/(現|銀|信|悠|L)到/);
-    let to=text.match(/到(現|銀|信|悠|L)/);
-    if(!from||!to) return null;
+ if(t.includes("到股票帳戶")){
+   let code=t.match(/現|銀|信|悠|L/);
+   let acc=code?accName(code[0]):"銀行";
+   return {type:"投資",amount,account:acc,date,month};
+ }
 
-    return {
-      type:"轉帳",
-      date,month,
-      name:"轉帳",
-      amount,
-      from:accountName(from[1]),
-      to:accountName(to[1])
-    };
-  }
+ if(t.includes("轉帳")&&t.includes("到")){
+   let f=t.match(/(現|銀|信|悠|L)到/);
+   let to=t.match(/到(現|銀|信|悠|L)/);
+   return {type:"轉帳",amount,from:accName(f[1]),to:accName(to[1]),date,month};
+ }
 
-  let code=text.match(/現|銀|信|悠|L/);
-  let account=code ? accountName(code[0]) : "現金";
+ let code=t.match(/現|銀|信|悠|L/);
+ let acc=code?accName(code[0]):"銀行";
+ let name=t.replace(/\d+/g,"").replace(/[現銀信悠L]/g,"");
 
-  let name=text.replace(/\d+/g,"").replace(/[現銀信悠L]/g,"").trim();
+ if(/薪水|收入/.test(name)){
+   return {type:"收入",amount,account:acc,name,date,month};
+ }
 
-  let incomeKeywords=/薪水|收入|獎金|打工|退款|零用錢|利息/;
-  let type=incomeKeywords.test(name) ? "收入" : "支出";
-
-  return {
-    type,date,month,name,amount,account,
-    category:type==="支出" ? classify(name) : "收入"
-  };
+ return {type:"支出",amount,account:acc,name,date,month,cat:classify(name)};
 }
 
-function addRecord(){
-  let input=document.getElementById("input");
-  let text=input.value.trim();
-  let record=parseInput(text);
-
-  if(!record || record.name===""){
-    alert("格式錯誤，請輸入：早餐60現、薪水30000銀、轉帳1000銀到現、股票價值50000");
-    return;
-  }
-
-  records.push(record);
-  save();
-  input.value="";
-  updateMonthOptions();
-  render();
+function add(){
+ let t=document.getElementById("input").value;
+ let r=parse(t);
+ if(!r) return alert("格式錯誤");
+ data.push(r);
+ localStorage.setItem("finalData",JSON.stringify(data));
+ updateMonth();
+ render();
 }
 
-function save(){
-  localStorage.setItem("moneyRecordsV2",JSON.stringify(records));
+function updateMonth(){
+ let mSel=document.getElementById("monthSelect");
+ let months=[...new Set(data.map(d=>d.month))].sort().reverse();
+ mSel.innerHTML="";
+ months.forEach(m=>{
+  let o=document.createElement("option");
+  o.value=m;o.textContent=m;
+  mSel.appendChild(o);
+ });
 }
 
-function updateMonthOptions(){
-  let select=document.getElementById("monthSelect");
-  let current=select.value;
-  let months=[...new Set(records.map(r=>r.month))].sort().reverse();
-  let thisMonth=getMonthKey(new Date());
-
-  if(!months.includes(thisMonth)) months.unshift(thisMonth);
-
-  select.innerHTML="";
-  months.forEach(m=>{
-    let option=document.createElement("option");
-    option.value=m;
-    option.textContent=m;
-    select.appendChild(option);
-  });
-
-  select.value=months.includes(current)?current:thisMonth;
-}
-
-function getFilteredRecords(){
-  let month=document.getElementById("monthSelect").value;
-  return records.filter(r=>r.month===month);
-}
-
-function getAccountBalances(){
-  let accounts={
-    "現金":0,
-    "銀行":0,
-    "悠遊卡":0,
-    "LINE Pay":0,
-    "信用卡":0
-  };
-
-  records.forEach(r=>{
-    if(r.type==="收入"){
-      accounts[r.account]+=r.amount;
-    }
-    if(r.type==="支出"){
-      accounts[r.account]-=r.amount;
-    }
-    if(r.type==="轉帳"){
-      accounts[r.from]-=r.amount;
-      accounts[r.to]+=r.amount;
-    }
-  });
-
-  return accounts;
-}
-
-function getStockValue(){
-  let stockRecords=records.filter(r=>r.type==="股票價值");
-  if(stockRecords.length===0) return 0;
-  return stockRecords[stockRecords.length-1].amount;
-}
-
-function renderAssets(){
-  let accounts=getAccountBalances();
-  let stock=getStockValue();
-  let cashAssets=Object.values(accounts).reduce((s,v)=>s+v,0);
-  let totalAssets=cashAssets+stock;
-
-  let div=document.getElementById("assets");
-  div.innerHTML="";
-
-  Object.keys(accounts).forEach(acc=>{
-    div.innerHTML+=`<div class="box asset">${acc}<br>${accounts[acc]}元</div>`;
-  });
-
-  div.innerHTML+=`<div class="box stock">股票帳戶價值<br>${stock}元</div>`;
-  div.innerHTML+=`<div class="box asset">總資產<br>${totalAssets}元</div>`;
-}
-
-function renderSummary(){
-  let filtered=getFilteredRecords();
-
-  let income=filtered.filter(r=>r.type==="收入").reduce((s,r)=>s+r.amount,0);
-  let expense=filtered.filter(r=>r.type==="支出").reduce((s,r)=>s+r.amount,0);
-  let transfer=filtered.filter(r=>r.type==="轉帳").reduce((s,r)=>s+r.amount,0);
-  let balance=income-expense;
-
-  let summary=document.getElementById("summary");
-  summary.innerHTML=`
-    <div class="box income">本月收入<br>${income}元</div>
-    <div class="box expense">本月支出<br>${expense}元</div>
-    <div class="box transfer">本月轉帳<br>${transfer}元</div>
-    <div class="box">本月結餘<br>${balance}元</div>
-  `;
-
-  let cats=["餐飲","交通","娛樂","購物","固定支出","醫療","其他"];
-  cats.forEach(cat=>{
-    let sum=filtered.filter(r=>r.type==="支出"&&r.category===cat).reduce((s,r)=>s+r.amount,0);
-    summary.innerHTML+=`<div class="box">${cat}<br>${sum}元</div>`;
-  });
-}
-
-function renderList(type,id){
-  let list=document.getElementById(id);
-  let filtered=getFilteredRecords().filter(r=>r.type===type);
-  list.innerHTML="";
-
-  if(filtered.length===0){
-    list.innerHTML=`<p>本月沒有${type}資料</p>`;
-    return;
-  }
-
-  filtered.forEach((r,index)=>{
-    if(type==="轉帳"){
-      list.innerHTML+=`
-      <div class="item">
-        <div><b>${r.amount}元</b><br><small>${r.date}｜${r.from} → ${r.to}</small></div>
-        <button class="delete" onclick="deleteRecord('${type}',${index})">刪除</button>
-      </div>`;
-    }else if(type==="股票價值"){
-      list.innerHTML+=`
-      <div class="item">
-        <div><b>股票帳戶價值</b> ${r.amount}元<br><small>${r.date}</small></div>
-        <button class="delete" onclick="deleteRecord('${type}',${index})">刪除</button>
-      </div>`;
-    }else{
-      list.innerHTML+=`
-      <div class="item">
-        <div><b>${r.name}</b> ${r.amount}元<br><small>${r.date}｜${r.category}｜${r.account}</small></div>
-        <button class="delete" onclick="deleteRecord('${type}',${index})">刪除</button>
-      </div>`;
-    }
-  });
-}
-
-function renderLists(){
-  renderList("支出","expenseList");
-  renderList("收入","incomeList");
-  renderList("轉帳","transferList");
-  renderList("股票價值","stockList");
-}
-
-function deleteRecord(type,indexInFiltered){
-  let filtered=getFilteredRecords().filter(r=>r.type===type);
-  let target=filtered[indexInFiltered];
-
-  let realIndex=records.findIndex(r=>JSON.stringify(r)===JSON.stringify(target));
-  if(realIndex!==-1){
-    records.splice(realIndex,1);
-    save();
-    updateMonthOptions();
-    render();
-  }
-}
-
-function renderAI(){
-  let filtered=getFilteredRecords();
-  let expenses=filtered.filter(r=>r.type==="支出");
-  let ai=document.getElementById("ai");
-
-  if(expenses.length===0){
-    ai.innerHTML="本月尚無支出資料，請先新增紀錄。";
-    return;
-  }
-
-  let cats=["餐飲","交通","娛樂","購物","固定支出","醫療","其他"];
-  let result=cats.map(cat=>{
-    return {
-      cat,
-      sum:expenses.filter(r=>r.category===cat).reduce((s,r)=>s+r.amount,0)
-    };
-  });
-
-  let max=result.reduce((a,b)=>b.sum>a.sum?b:a);
-  let total=expenses.reduce((s,r)=>s+r.amount,0);
-  let percent=Math.round(max.sum/total*100);
-
-  let advice=percent>=50
-    ? `建議減少「${max.cat}」支出，避免單一類別花費過高。`
-    : "目前本月支出結構正常，請持續保持。";
-
-  ai.innerHTML=`
-    本月最大支出類別：<b>${max.cat}</b><br>
-    金額：<b>${max.sum}元</b><br>
-    佔本月支出：約 <b>${percent}%</b><br>
-    AI建議：${advice}
-  `;
-}
-
-function clearAll(){
-  if(confirm("確定要清除全部資料嗎？")){
-    records=[];
-    save();
-    updateMonthOptions();
-    render();
-  }
+function filtered(){
+ let m=document.getElementById("monthSelect").value;
+ return data.filter(d=>d.month==m);
 }
 
 function render(){
-  renderAssets();
-  renderSummary();
-  renderLists();
-  renderAI();
+ let f=filtered();
+ let acc={現金:0,銀行:0,信用卡:0,悠遊卡:0,"LINE Pay":0};
+ let stock=0;
+
+ let inc=0,exp=0;
+
+ f.forEach(d=>{
+   if(d.type=="收入"){acc[d.account]+=d.amount;inc+=d.amount;}
+   if(d.type=="支出"){acc[d.account]-=d.amount;exp+=d.amount;}
+   if(d.type=="轉帳"){acc[d.from]-=d.amount;acc[d.to]+=d.amount;}
+   if(d.type=="投資"){acc[d.account]-=d.amount;stock+=d.amount;}
+ });
+
+ let totalAsset=stock+Object.values(acc).reduce((s,v)=>s+v,0);
+
+ let aHTML="";
+ Object.keys(acc).forEach(k=>{
+  aHTML+=`<div class="box">${k}<br>${acc[k]}</div>`;
+ });
+ aHTML+=`<div class="box">股票<br>${stock}</div>`;
+ aHTML+=`<div class="box">總資產<br>${totalAsset}</div>`;
+ document.getElementById("assets").innerHTML=aHTML;
+
+ document.getElementById("summary").innerHTML=
+ `<div class="box">收入<br>${inc}</div>
+  <div class="box">支出<br>${exp}</div>
+  <div class="box">結餘<br>${inc-exp}</div>`;
+
+ let maxCat={name:"",val:0};
+ let cats={};
+ f.filter(d=>d.type=="支出").forEach(d=>{
+  cats[d.cat]=(cats[d.cat]||0)+d.amount;
+ });
+ Object.keys(cats).forEach(c=>{
+  if(cats[c]>maxCat.val){maxCat={name:c,val:cats[c]}}
+ });
+
+ document.getElementById("ai").innerHTML=
+ `最多支出：${maxCat.name||"無"} ${maxCat.val||0}`;
+
+ renderList(f);
 }
 
-updateMonthOptions();
+function renderList(f){
+ let e="",i="",t="",s="";
+ f.forEach((d,idx)=>{
+   let btn=`<button class="delete" onclick="del(${idx})">刪</button>`;
+   if(d.type=="支出") e+=`<div class="item">${d.name} ${d.amount}${btn}</div>`;
+   if(d.type=="收入") i+=`<div class="item">${d.name} ${d.amount}${btn}</div>`;
+   if(d.type=="轉帳") t+=`<div class="item">${d.from}→${d.to} ${d.amount}${btn}</div>`;
+   if(d.type=="投資") s+=`<div class="item">股票 +${d.amount}${btn}</div>`;
+ });
+ document.getElementById("expense").innerHTML=e;
+ document.getElementById("income").innerHTML=i;
+ document.getElementById("transfer").innerHTML=t;
+ document.getElementById("stock").innerHTML=s;
+}
+
+function del(i){
+ data.splice(i,1);
+ localStorage.setItem("finalData",JSON.stringify(data));
+ render();
+}
+
+updateMonth();
 render();
 </script>
 
