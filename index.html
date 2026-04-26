@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI智慧記帳App｜月份版</title>
+<title>AI智慧記帳App｜圖表版</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
 body{
@@ -92,14 +94,16 @@ button.red{
 .hint{
   color:#666;
   font-size:14px;
-  margin-top:8px;
+}
+canvas{
+  max-width:100%;
 }
 </style>
 </head>
 
 <body>
 
-<header>AI智慧記帳App｜月份統整版</header>
+<header>AI智慧記帳App｜圖表版</header>
 
 <div class="container">
 
@@ -121,6 +125,11 @@ button.red{
   </div>
 
   <div class="card">
+    <h3>本月支出圖表</h3>
+    <canvas id="pieChart"></canvas>
+  </div>
+
+  <div class="card">
     <h3>本月 AI 分析建議</h3>
     <div class="ai" id="ai">目前尚無資料，請先新增記帳。</div>
   </div>
@@ -135,6 +144,7 @@ button.red{
 
 <script>
 let data = JSON.parse(localStorage.getItem("expenseData")) || [];
+let pieChart = null;
 
 function getMonthKey(dateObj){
   let y = dateObj.getFullYear();
@@ -203,8 +213,35 @@ function save(){
   localStorage.setItem("expenseData", JSON.stringify(data));
 }
 
-function deleteItem(indexInFiltered){
+function updateMonthOptions(){
+  let select = document.getElementById("monthSelect");
+  let currentValue = select.value;
+
+  let months = [...new Set(data.map(item => item.month))].sort().reverse();
+  let currentMonth = getMonthKey(new Date());
+
+  if(!months.includes(currentMonth)){
+    months.unshift(currentMonth);
+  }
+
+  select.innerHTML = "";
+
+  months.forEach(month=>{
+    let option = document.createElement("option");
+    option.value = month;
+    option.textContent = month;
+    select.appendChild(option);
+  });
+
+  select.value = months.includes(currentValue) ? currentValue : currentMonth;
+}
+
+function getFilteredData(){
   let selectedMonth = document.getElementById("monthSelect").value;
+  return data.filter(item => item.month === selectedMonth);
+}
+
+function deleteItem(indexInFiltered){
   let filtered = getFilteredData();
   let target = filtered[indexInFiltered];
 
@@ -234,42 +271,11 @@ function clearAll(){
   }
 }
 
-function updateMonthOptions(){
-  let select = document.getElementById("monthSelect");
-  let currentValue = select.value;
-
-  let months = [...new Set(data.map(item => item.month))].sort().reverse();
-  let currentMonth = getMonthKey(new Date());
-
-  if(!months.includes(currentMonth)){
-    months.unshift(currentMonth);
-  }
-
-  select.innerHTML = "";
-
-  months.forEach(month=>{
-    let option = document.createElement("option");
-    option.value = month;
-    option.textContent = month;
-    select.appendChild(option);
-  });
-
-  if(months.includes(currentValue)){
-    select.value = currentValue;
-  }else{
-    select.value = currentMonth;
-  }
-}
-
-function getFilteredData(){
-  let selectedMonth = document.getElementById("monthSelect").value;
-  return data.filter(item => item.month === selectedMonth);
-}
-
 function render(){
   renderList();
   renderSummary();
   renderAI();
+  renderChart();
 }
 
 function renderList(){
@@ -296,9 +302,23 @@ function renderList(){
   });
 }
 
-function renderSummary(){
+function getCategoryTotals(){
   let filtered = getFilteredData();
   let categories = ["餐飲","交通","娛樂","購物","投資","固定支出","其他"];
+
+  return categories.map(cat=>{
+    return {
+      cat,
+      sum: filtered
+        .filter(i=>i.category===cat)
+        .reduce((s,i)=>s+i.amount,0)
+    };
+  });
+}
+
+function renderSummary(){
+  let filtered = getFilteredData();
+  let categories = getCategoryTotals();
   let summary = document.getElementById("summary");
   summary.innerHTML = "";
 
@@ -314,12 +334,39 @@ function renderSummary(){
   summary.innerHTML += `<div class="box">本月生活支出<br>${lifeTotal}元</div>`;
   summary.innerHTML += `<div class="box">本月投資<br>${investTotal}元</div>`;
 
-  categories.forEach(cat=>{
-    let sum = filtered
-      .filter(i=>i.category===cat)
-      .reduce((s,i)=>s+i.amount,0);
+  categories.forEach(item=>{
+    summary.innerHTML += `<div class="box">${item.cat}<br>${item.sum}元</div>`;
+  });
+}
 
-    summary.innerHTML += `<div class="box">${cat}<br>${sum}元</div>`;
+function renderChart(){
+  let ctx = document.getElementById("pieChart");
+  let categoryTotals = getCategoryTotals().filter(item => item.sum > 0);
+
+  if(pieChart){
+    pieChart.destroy();
+  }
+
+  if(categoryTotals.length === 0){
+    return;
+  }
+
+  pieChart = new Chart(ctx, {
+    type: "pie",
+    data: {
+      labels: categoryTotals.map(item => item.cat),
+      datasets: [{
+        data: categoryTotals.map(item => item.sum)
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          position: "bottom"
+        }
+      }
+    }
   });
 }
 
@@ -332,16 +379,7 @@ function renderAI(){
     return;
   }
 
-  let categories = ["餐飲","交通","娛樂","購物","固定支出","其他"];
-  let result = categories.map(cat=>{
-    return {
-      cat,
-      sum:filtered
-        .filter(i=>i.category===cat)
-        .reduce((s,i)=>s+i.amount,0)
-    };
-  });
-
+  let result = getCategoryTotals().filter(item => item.cat !== "投資");
   let max = result.reduce((a,b)=> b.sum>a.sum ? b : a);
   let lifeTotal = result.reduce((s,i)=>s+i.sum,0);
   let percent = lifeTotal===0 ? 0 : Math.round(max.sum/lifeTotal*100);
@@ -371,3 +409,4 @@ render();
 
 </body>
 </html>
+
