@@ -1,100 +1,292 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<title>AI智慧記帳</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI智慧記帳App</title>
+
 <style>
-body { font-family: Arial; padding: 20px; }
-input { padding: 10px; width: 200px; }
-button { padding: 10px; }
-.card { margin-top: 10px; }
+body{
+  margin:0;
+  font-family:Arial,"Microsoft JhengHei",sans-serif;
+  background:#f4f7fb;
+  color:#222;
+}
+header{
+  background:#1f4e79;
+  color:white;
+  padding:18px;
+  text-align:center;
+  font-size:24px;
+  font-weight:bold;
+}
+.container{
+  padding:15px;
+  max-width:900px;
+  margin:auto;
+}
+.card{
+  background:white;
+  border-radius:14px;
+  padding:15px;
+  margin-bottom:15px;
+  box-shadow:0 3px 10px rgba(0,0,0,0.08);
+}
+input{
+  width:100%;
+  box-sizing:border-box;
+  padding:13px;
+  font-size:18px;
+  border:1px solid #ccc;
+  border-radius:10px;
+}
+button{
+  width:100%;
+  margin-top:10px;
+  padding:13px;
+  border:none;
+  border-radius:10px;
+  background:#1f4e79;
+  color:white;
+  font-size:18px;
+}
+button.red{
+  background:#c0392b;
+}
+.summary{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:10px;
+}
+.box{
+  background:#eef5fb;
+  border-radius:12px;
+  padding:12px;
+  text-align:center;
+  font-weight:bold;
+}
+.ai{
+  background:#fff7e6;
+  border-left:6px solid #f0a500;
+  padding:12px;
+  border-radius:10px;
+  line-height:1.7;
+}
+.item{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:1px solid #ddd;
+  padding:10px 0;
+}
+.item small{
+  color:#666;
+}
+.delete{
+  background:#e74c3c;
+  width:auto;
+  padding:6px 10px;
+  font-size:14px;
+}
+.hint{
+  color:#666;
+  font-size:14px;
+  margin-top:8px;
+}
 </style>
 </head>
 
 <body>
 
-<h1>AI智慧記帳</h1>
+<header>AI智慧記帳App</header>
 
-<input id="input" placeholder="例如 早餐60現">
-<button onclick="add()">新增</button>
+<div class="container">
 
-<h3>紀錄</h3>
-<ul id="list"></ul>
+  <div class="card">
+    <h3>新增記帳</h3>
+    <input id="input" placeholder="例如：早餐60現、股票3000轉、電影450信">
+    <button onclick="addExpense()">新增</button>
+    <p class="hint">支付代碼：現=現金、信=信用卡、轉=轉帳、悠=悠遊卡、L=LINE Pay</p>
+  </div>
 
-<h3>統計</h3>
-<div id="total"></div>
-<div id="analysis"></div>
+  <div class="card">
+    <h3>統計總覽</h3>
+    <div class="summary" id="summary"></div>
+  </div>
+
+  <div class="card">
+    <h3>AI分析建議</h3>
+    <div class="ai" id="ai">目前尚無資料，請先新增記帳。</div>
+  </div>
+
+  <div class="card">
+    <h3>記帳紀錄</h3>
+    <div id="list"></div>
+    <button class="red" onclick="clearAll()">清除全部資料</button>
+  </div>
+
+</div>
 
 <script>
-let data = JSON.parse(localStorage.getItem("data")) || [];
+let data = JSON.parse(localStorage.getItem("expenseData")) || [];
 
-function parse(text){
+function parseInput(text){
   let num = text.match(/\d+/);
   if(!num) return null;
 
   let amount = parseInt(num[0]);
-  let name = text.replace(/\d+|現|信|轉/g,"");
 
-  let pay = text.includes("現") ? "現金" :
-            text.includes("信") ? "信用卡" :
-            text.includes("轉") ? "轉帳" : "未知";
+  let name = text
+    .replace(/\d+/g,"")
+    .replace(/[現信轉悠L]/g,"")
+    .trim();
 
-  let category =
-    name.includes("早餐") || name.includes("午餐") || name.includes("晚餐") ? "餐飲" :
-    name.includes("股票") || name.includes("ETF") ? "投資" :
-    name.includes("高鐵") || name.includes("公車") ? "交通" :
-    name.includes("娛樂") || name.includes("電影") ? "娛樂" :
-    name.includes("房租") || name.includes("保險") ? "固定支出" :
-    "其他";
+  let pay = "現金";
+  if(text.includes("信")) pay = "信用卡";
+  else if(text.includes("轉")) pay = "轉帳";
+  else if(text.includes("悠")) pay = "悠遊卡";
+  else if(text.includes("L")) pay = "LINE Pay";
+  else if(text.includes("現")) pay = "現金";
 
-  return {name, amount, pay, category};
+  let category = classify(name);
+
+  return {
+    date:new Date().toLocaleDateString("zh-TW"),
+    name,
+    amount,
+    pay,
+    category
+  };
 }
 
-function add(){
-  let text = document.getElementById("input").value;
-  let obj = parse(text);
+function classify(name){
+  if(/早餐|午餐|晚餐|飲料|便當|咖啡|麵|飯/.test(name)) return "餐飲";
+  if(/公車|捷運|高鐵|火車|交通|油錢|Uber/.test(name)) return "交通";
+  if(/娛樂|電影|遊戲|Netflix|KTV|唱歌/.test(name)) return "娛樂";
+  if(/購物|衣服|鞋子|包包|生活用品/.test(name)) return "購物";
+  if(/股票|ETF|基金|投資/.test(name)) return "投資";
+  if(/房租|房貸|保險|電費|水費|手機費/.test(name)) return "固定支出";
+  return "其他";
+}
 
-  if(!obj) return alert("格式錯誤");
+function addExpense(){
+  let input = document.getElementById("input");
+  let text = input.value.trim();
 
-  data.push(obj);
-  localStorage.setItem("data", JSON.stringify(data));
+  let item = parseInput(text);
+  if(!item || item.name===""){
+    alert("格式錯誤，請輸入例如：早餐60現");
+    return;
+  }
 
+  data.push(item);
+  save();
+  input.value="";
   render();
 }
 
+function save(){
+  localStorage.setItem("expenseData", JSON.stringify(data));
+}
+
+function deleteItem(index){
+  data.splice(index,1);
+  save();
+  render();
+}
+
+function clearAll(){
+  if(confirm("確定要清除全部資料嗎？")){
+    data=[];
+    save();
+    render();
+  }
+}
+
 function render(){
+  renderList();
+  renderSummary();
+  renderAI();
+}
+
+function renderList(){
   let list = document.getElementById("list");
   list.innerHTML = "";
 
-  let total = 0;
-  let categorySum = {};
-
-  data.forEach(item=>{
-    total += item.amount;
-
-    categorySum[item.category] = (categorySum[item.category]||0) + item.amount;
-
-    let li = document.createElement("li");
-    li.innerText = `${item.name} ${item.amount}元（${item.category} / ${item.pay}）`;
-    list.appendChild(li);
-  });
-
-  document.getElementById("total").innerText = "總支出：" + total;
-
-  // 找最大
-  let maxCat = "";
-  let maxVal = 0;
-
-  for(let k in categorySum){
-    if(categorySum[k] > maxVal){
-      maxVal = categorySum[k];
-      maxCat = k;
-    }
+  if(data.length===0){
+    list.innerHTML = "<p>目前沒有記帳資料</p>";
+    return;
   }
 
-  document.getElementById("analysis").innerText =
-    "AI分析：你花最多在「" + maxCat + "」，建議控制支出";
+  data.forEach((item,index)=>{
+    list.innerHTML += `
+      <div class="item">
+        <div>
+          <b>${item.name}</b> ${item.amount}元<br>
+          <small>${item.date}｜${item.category}｜${item.pay}</small>
+        </div>
+        <button class="delete" onclick="deleteItem(${index})">刪除</button>
+      </div>
+    `;
+  });
+}
 
+function renderSummary(){
+  let categories = ["餐飲","交通","娛樂","購物","投資","固定支出","其他"];
+  let summary = document.getElementById("summary");
+  summary.innerHTML = "";
+
+  let total = data.reduce((s,i)=>s+i.amount,0);
+  let lifeTotal = data
+    .filter(i=>i.category!=="投資")
+    .reduce((s,i)=>s+i.amount,0);
+
+  summary.innerHTML += `<div class="box">總金額<br>${total}元</div>`;
+  summary.innerHTML += `<div class="box">生活支出<br>${lifeTotal}元</div>`;
+
+  categories.forEach(cat=>{
+    let sum = data
+      .filter(i=>i.category===cat)
+      .reduce((s,i)=>s+i.amount,0);
+
+    summary.innerHTML += `<div class="box">${cat}<br>${sum}元</div>`;
+  });
+}
+
+function renderAI(){
+  let ai = document.getElementById("ai");
+
+  if(data.length===0){
+    ai.innerHTML = "目前尚無資料，請先新增記帳。";
+    return;
+  }
+
+  let categories = ["餐飲","交通","娛樂","購物","固定支出","其他"];
+  let result = categories.map(cat=>{
+    return {
+      cat,
+      sum:data
+        .filter(i=>i.category===cat)
+        .reduce((s,i)=>s+i.amount,0)
+    };
+  });
+
+  let max = result.reduce((a,b)=> b.sum>a.sum ? b : a);
+  let lifeTotal = result.reduce((s,i)=>s+i.sum,0);
+  let percent = lifeTotal===0 ? 0 : Math.round(max.sum/lifeTotal*100);
+
+  let warning = percent >= 50 ? "⚠️ 支出偏高" : "✅ 支出正常";
+  let advice = percent >= 50
+    ? `建議減少「${max.cat}」支出，避免單一類別花費過高。`
+    : "目前支出結構正常，請持續保持良好記帳習慣。";
+
+  ai.innerHTML = `
+    最大支出類別：<b>${max.cat}</b><br>
+    金額：<b>${max.sum}元</b><br>
+    佔生活支出：約 <b>${percent}%</b><br>
+    判斷結果：${warning}<br>
+    AI建議：${advice}
+  `;
 }
 
 render();
